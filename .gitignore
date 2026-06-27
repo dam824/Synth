@@ -36,5 +36,6 @@ yarn-error.log*
 /docs/
 *.md
 
-# Dossier de direction design — ne jamais pousser
+# Dossiers de direction design — ne jamais pousser
 /synth-direction-ux-ui/
+/design/

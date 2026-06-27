@@ -17,7 +17,7 @@ export default function LoginPage() {
           <h1 className="m-0 mb-[9px] text-[24px] font-semibold tracking-[-0.02em]">
             Bon retour
           </h1>
-          <p className="m-0 text-[15px] leading-[1.5] text-[#6B6A72]">
+          <p className="m-0 text-[15px] leading-[1.5] text-muted-fg">
             Une question. La meilleure réponse.
             <br />
             Connectez-vous pour continuer.
@@ -27,7 +27,7 @@ export default function LoginPage() {
         <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
           <button
             onClick={() => signIn("google", { callbackUrl: "/app" })}
-            className="mb-[11px] flex h-12 w-full items-center justify-center gap-[10px] rounded-[11px] border border-[#E2E0DA] bg-surface text-[15px] font-semibold text-foreground transition hover:bg-[#FAFAF8]"
+            className="mb-[11px] flex h-12 w-full items-center justify-center gap-[10px] rounded-[11px] border border-border bg-white/[.04] text-[15px] font-semibold text-foreground transition hover:bg-white/[.07]"
           >
             <span
               className="inline-block h-[18px] w-[18px] rounded-full"
@@ -40,7 +40,7 @@ export default function LoginPage() {
           </button>
           <button
             onClick={() => signIn("github", { callbackUrl: "/app" })}
-            className="flex h-12 w-full items-center justify-center gap-[10px] rounded-[11px] border border-primary bg-primary text-[15px] font-semibold text-white transition hover:opacity-90"
+            className="flex h-12 w-full items-center justify-center gap-[10px] rounded-[11px] border border-primary bg-primary text-[15px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
           >
             <svg
               width="17"

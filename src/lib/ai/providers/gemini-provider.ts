@@ -6,7 +6,12 @@ import type { ProviderCallOutput } from "../types";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 // Appelle Google Gemini et renvoie le texte produit.
-export async function callGemini(prompt: string): Promise<ProviderCallOutput> {
+export async function callGemini(
+  prompt: string,
+  // Le SDK Gemini ne gère pas l'AbortSignal ici ; paramètre accepté pour
+  // garder une signature homogène avec les autres fournisseurs.
+  _signal?: AbortSignal,
+): Promise<ProviderCallOutput> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY manquante");

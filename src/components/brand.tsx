@@ -1,9 +1,9 @@
-// Losange violet = signal d'intelligence de la marque.
+// Losange émeraude = signal d'intelligence de la marque.
 export function Diamond({ size = 14 }: { size?: number }) {
   return (
     <span
       aria-hidden
-      className="inline-block rotate-45 rounded-[3px] bg-accent"
+      className="inline-block rotate-45 rounded-[3px] bg-accent shadow-glow"
       style={{ width: size, height: size }}
     />
   );

@@ -7,7 +7,10 @@ const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
 
 // Appelle OpenAI et renvoie le texte produit. Lève une erreur explicite
 // en cas de problème (clé manquante, réponse vide, erreur réseau).
-export async function callOpenAI(prompt: string): Promise<ProviderCallOutput> {
+export async function callOpenAI(
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<ProviderCallOutput> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY manquante");
@@ -15,13 +18,16 @@ export async function callOpenAI(prompt: string): Promise<ProviderCallOutput> {
 
   const client = new OpenAI({ apiKey });
 
-  const completion = await client.chat.completions.create({
-    model: DEFAULT_MODEL,
-    messages: [
-      { role: "system", content: PROVIDER_SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-  });
+  const completion = await client.chat.completions.create(
+    {
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: PROVIDER_SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+    },
+    { signal },
+  );
 
   const content = completion.choices[0]?.message?.content?.trim();
   if (!content) {

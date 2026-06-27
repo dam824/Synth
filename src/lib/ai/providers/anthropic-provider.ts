@@ -6,7 +6,10 @@ import type { ProviderCallOutput } from "../types";
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
 // Appelle Anthropic Claude et renvoie le texte produit.
-export async function callAnthropic(prompt: string): Promise<ProviderCallOutput> {
+export async function callAnthropic(
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<ProviderCallOutput> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY manquante");
@@ -14,12 +17,15 @@ export async function callAnthropic(prompt: string): Promise<ProviderCallOutput>
 
   const client = new Anthropic({ apiKey });
 
-  const message = await client.messages.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 4096,
-    system: PROVIDER_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: prompt }],
-  });
+  const message = await client.messages.create(
+    {
+      model: DEFAULT_MODEL,
+      max_tokens: 4096,
+      system: PROVIDER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: prompt }],
+    },
+    { signal },
+  );
 
   const content = message.content
     .filter((block) => block.type === "text")
