@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Diamond, Logo } from "@/components/brand";
 import type {
@@ -19,6 +19,20 @@ interface ConversationSummary {
 interface SynthClientProps {
   userEmail: string;
   conversations: ConversationSummary[];
+}
+
+interface ConvItem {
+  id: string;
+  title: string;
+  pinned: boolean;
+  archived: boolean;
+  projectId: string | null;
+  updatedAt: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
 }
 
 type Phase = "empty" | "loading" | "answer" | "error";
@@ -108,7 +122,46 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     string | null
   >(null);
 
+  // Sidebar : conversations + projets gérés côté client.
+  const [convos, setConvos] = useState<ConvItem[]>(() =>
+    conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      pinned: false,
+      archived: false,
+      projectId: null,
+      updatedAt: c.updatedAt,
+    })),
+  );
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
+
+  async function refreshSidebar() {
+    try {
+      const [cRes, pRes] = await Promise.all([
+        fetch("/api/conversations"),
+        fetch("/api/projects"),
+      ]);
+      if (cRes.ok) setConvos((await cRes.json()).conversations ?? []);
+      if (pRes.ok) setProjects((await pRes.json()).projects ?? []);
+    } catch {
+      /* hors-ligne : on garde l'état courant */
+    }
+  }
+
+  useEffect(() => {
+    refreshSidebar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function run(prompt: string) {
     setAskedQuestion(prompt);
@@ -143,7 +196,6 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       const decoder = new TextDecoder();
       let buffer = "";
 
-      // Lecture du flux NDJSON ligne par ligne.
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -157,7 +209,6 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        // Stop demandé par l'utilisateur : on revient au composer.
         setPhase("empty");
         return;
       }
@@ -198,6 +249,8 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         setResult(ev as unknown as FinalPayload);
         setPhase("answer");
         setQuestion("");
+        // Rafraîchit la liste pour faire apparaître la nouvelle conversation.
+        refreshSidebar();
         break;
       case "error":
         setErrorMsg(
@@ -219,9 +272,9 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     abortRef.current?.abort();
   }
 
-  // Recharge le dernier échange d'une conversation dans la fenêtre principale.
   async function openConversation(id: string) {
     abortRef.current?.abort();
+    setMenuId(null);
     setActiveConversationId(id);
     setErrorMsg("");
     try {
@@ -284,6 +337,98 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     }
   }
 
+  // ----- Actions de gestion des conversations -----
+
+  async function patchConv(id: string, body: Partial<ConvItem>) {
+    setConvos((cs) => cs.map((c) => (c.id === id ? { ...c, ...body } : c)));
+    await fetch(`/api/conversations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }
+
+  function togglePin(c: ConvItem) {
+    setMenuId(null);
+    patchConv(c.id, { pinned: !c.pinned });
+  }
+
+  function setArchived(c: ConvItem, archived: boolean) {
+    setMenuId(null);
+    patchConv(c.id, { archived });
+    if (archived && activeConversationId === c.id) newQuestion(true);
+  }
+
+  function moveToProject(c: ConvItem, projectId: string | null) {
+    setMenuId(null);
+    patchConv(c.id, { projectId });
+  }
+
+  function startRename(c: ConvItem) {
+    setMenuId(null);
+    setRenameValue(c.title);
+    setRenamingId(c.id);
+  }
+
+  function commitRename() {
+    if (!renamingId) return;
+    const value = renameValue.trim();
+    if (value) patchConv(renamingId, { title: value });
+    setRenamingId(null);
+  }
+
+  async function deleteConv(c: ConvItem) {
+    setMenuId(null);
+    if (!window.confirm("Supprimer définitivement cette conversation ?")) return;
+    setConvos((cs) => cs.filter((x) => x.id !== c.id));
+    if (activeConversationId === c.id) newQuestion(true);
+    await fetch(`/api/conversations/${c.id}`, { method: "DELETE" }).catch(
+      () => {},
+    );
+  }
+
+  async function createProject() {
+    const name = window.prompt("Nom du projet", "Nouveau projet");
+    if (name === null) return;
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const { project } = await res.json();
+        setProjects((ps) => [...ps, project]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function deleteProject(p: Project) {
+    if (
+      !window.confirm(
+        `Supprimer le projet « ${p.name} » ? Les conversations seront conservées.`,
+      )
+    )
+      return;
+    setProjects((ps) => ps.filter((x) => x.id !== p.id));
+    setConvos((cs) =>
+      cs.map((c) => (c.projectId === p.id ? { ...c, projectId: null } : c)),
+    );
+    await fetch(`/api/projects/${p.id}`, { method: "DELETE" }).catch(() => {});
+  }
+
+  function openMenu(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuPos({
+      top: r.bottom + 4,
+      left: Math.min(r.left - 200, window.innerWidth - 236),
+    });
+    setMenuId(menuId === id ? null : id);
+  }
+
   const headerNote =
     phase === "answer"
       ? "Réponse prête"
@@ -295,11 +440,63 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
 
   const showComposer = phase !== "answer";
 
+  const pinned = convos.filter((c) => c.pinned && !c.archived);
+  const archivedList = convos.filter((c) => c.archived);
+  const loose = convos.filter(
+    (c) => !c.archived && !c.pinned && !c.projectId,
+  );
+  const menuConv = menuId ? convos.find((c) => c.id === menuId) : null;
+
+  // Ligne de conversation (réutilisée dans chaque section).
+  const renderConv = (c: ConvItem) => {
+    if (renamingId === c.id) {
+      return (
+        <input
+          key={c.id}
+          autoFocus
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitRename();
+            if (e.key === "Escape") setRenamingId(null);
+          }}
+          className="w-full rounded-[9px] border border-accent/40 bg-surface px-3 py-[9px] text-[13.5px] text-foreground outline-none"
+        />
+      );
+    }
+    return (
+      <div key={c.id} className="group relative flex items-center">
+        <button
+          onClick={() => openConversation(c.id)}
+          title={c.title}
+          className={`flex-1 truncate rounded-[9px] px-3 py-[10px] text-left text-[13.5px] leading-[1.4] transition hover:bg-white/[.04] ${
+            activeConversationId === c.id
+              ? "bg-white/[.05] text-foreground"
+              : "text-muted-fg"
+          }`}
+        >
+          {c.pinned && <span className="mr-1 text-accent-strong">★</span>}
+          {c.title}
+        </button>
+        <button
+          onClick={(e) => openMenu(e, c.id)}
+          title="Options"
+          className={`absolute right-1 flex h-7 w-7 items-center justify-center rounded-md text-faint transition hover:bg-white/[.08] hover:text-foreground ${
+            menuId === c.id ? "flex" : "hidden group-hover:flex"
+          }`}
+        >
+          ⋯
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
       <aside className="synth-scroll hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-border-soft bg-surface-soft lg:flex">
-        <div className="px-4 pb-[10px] pt-4">
+        <div className="space-y-2 px-4 pb-[10px] pt-4">
           <button
             onClick={() => newQuestion(true)}
             className="flex h-[42px] w-full items-center gap-[9px] rounded-md bg-primary px-[14px] text-[14px] font-semibold tracking-[-0.01em] text-primary-fg shadow-glow transition hover:opacity-90"
@@ -307,30 +504,76 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
             <span className="text-[17px] font-normal leading-none">+</span>{" "}
             Nouvelle question
           </button>
+          <button
+            onClick={createProject}
+            className="flex h-[34px] w-full items-center gap-[8px] rounded-md border border-border px-[12px] text-[13px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
+          >
+            <span className="text-[15px] leading-none">+</span> Nouveau projet
+          </button>
         </div>
-        <div className="px-4 pb-[6px] pt-[14px] font-mono text-[11px] tracking-[0.06em] text-faint">
-          RÉCENTES
-        </div>
-        <div className="flex flex-col gap-[2px] px-2">
-          {conversations.length === 0 && (
-            <p className="px-3 text-[13px] text-faint">Aucune question.</p>
+
+        <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {/* Épinglées */}
+          {pinned.length > 0 && (
+            <Section title="ÉPINGLÉES">{pinned.map(renderConv)}</Section>
           )}
-          {conversations.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => openConversation(c.id)}
-              title={c.title}
-              className={`truncate rounded-[9px] px-3 py-[10px] text-left text-[13.5px] leading-[1.4] transition hover:bg-white/[.04] ${
-                activeConversationId === c.id
-                  ? "bg-white/[.05] text-foreground"
-                  : "text-muted-fg"
-              }`}
-            >
-              {c.title}
-            </button>
-          ))}
+
+          {/* Projets */}
+          {projects.map((p) => {
+            const items = convos.filter(
+              (c) => c.projectId === p.id && !c.archived && !c.pinned,
+            );
+            return (
+              <div key={p.id} className="mb-1 mt-3">
+                <div className="group/proj flex items-center justify-between px-3 pb-[4px]">
+                  <span className="flex items-center gap-[6px] font-mono text-[11px] tracking-[0.04em] text-faint">
+                    <span>🗂</span>
+                    <span className="truncate">{p.name}</span>
+                  </span>
+                  <button
+                    onClick={() => deleteProject(p)}
+                    title="Supprimer le projet"
+                    className="hidden text-[12px] text-faint hover:text-danger-fg group-hover/proj:block"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {items.length === 0 ? (
+                  <p className="px-3 py-1 text-[12px] text-faint/70">
+                    Glissez une conversation ici via « ⋯ ».
+                  </p>
+                ) : (
+                  items.map(renderConv)
+                )}
+              </div>
+            );
+          })}
+
+          {/* Récentes */}
+          <Section title="RÉCENTES">
+            {loose.length === 0 ? (
+              <p className="px-3 text-[13px] text-faint">Aucune question.</p>
+            ) : (
+              loose.map(renderConv)
+            )}
+          </Section>
+
+          {/* Archivées */}
+          {archivedList.length > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={() => setShowArchived((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-1 font-mono text-[11px] tracking-[0.04em] text-faint hover:text-muted-fg"
+              >
+                <span>ARCHIVÉES ({archivedList.length})</span>
+                <span>{showArchived ? "▾" : "▸"}</span>
+              </button>
+              {showArchived && archivedList.map(renderConv)}
+            </div>
+          )}
         </div>
-        <div className="mt-auto flex items-center justify-between border-t border-border-soft px-4 py-[14px]">
+
+        <div className="flex items-center justify-between border-t border-border-soft px-4 py-[14px]">
           <div className="flex min-w-0 items-center gap-[9px]">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent-strong">
               {initials(userEmail)}
@@ -506,7 +749,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
               )}
             </div>
 
-            {/* Colonne « processus » (coulisses) */}
+            {/* Colonne « processus » */}
             <aside className="lg:sticky lg:top-[84px] lg:self-start">
               <div className="rounded-xl border border-border bg-surface p-4">
                 <p className="mb-4 font-mono text-[11px] tracking-[0.08em] text-faint">
@@ -527,16 +770,9 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                       />
                     );
                   })}
-                  {/* Étape de synthèse (le Juge) */}
                   <div className="mt-1 flex items-center gap-3 border-t border-border-soft pt-3">
                     <StatusDot
-                      status={
-                        judging === "ok"
-                          ? "ok"
-                          : judging === "running"
-                            ? "running"
-                            : "running"
-                      }
+                      status={judging === "ok" ? "ok" : "running"}
                       idle={judging === null}
                     />
                     <div className="min-w-0 flex-1">
@@ -558,7 +794,6 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
           </div>
         )}
 
-        {/* Composer */}
         {showComposer && (
           <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-6 pb-[22px] pt-[14px]">
             <div className="mx-auto max-w-[720px]">
@@ -598,7 +833,96 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
           </div>
         )}
       </main>
+
+      {/* Menu contextuel d'une conversation */}
+      {menuConv && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+          <div
+            className="fixed z-50 w-[224px] rounded-xl border border-border bg-surface p-1 shadow-card"
+            style={{ top: menuPos.top, left: menuPos.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MenuItem onClick={() => togglePin(menuConv)}>
+              {menuConv.pinned ? "★ Retirer l'épingle" : "★ Épingler"}
+            </MenuItem>
+            <MenuItem onClick={() => startRename(menuConv)}>
+              ✎ Renommer
+            </MenuItem>
+
+            {(projects.length > 0 || menuConv.projectId) && (
+              <div className="my-1 border-t border-border-soft pt-1">
+                <p className="px-3 py-1 font-mono text-[10px] tracking-[0.06em] text-faint">
+                  DÉPLACER VERS
+                </p>
+                {menuConv.projectId && (
+                  <MenuItem onClick={() => moveToProject(menuConv, null)}>
+                    ↩ Sans projet
+                  </MenuItem>
+                )}
+                {projects
+                  .filter((p) => p.id !== menuConv.projectId)
+                  .map((p) => (
+                    <MenuItem
+                      key={p.id}
+                      onClick={() => moveToProject(menuConv, p.id)}
+                    >
+                      🗂 {p.name}
+                    </MenuItem>
+                  ))}
+              </div>
+            )}
+
+            <div className="my-1 border-t border-border-soft pt-1">
+              <MenuItem onClick={() => setArchived(menuConv, !menuConv.archived)}>
+                {menuConv.archived ? "⊡ Désarchiver" : "⊟ Archiver"}
+              </MenuItem>
+              <MenuItem danger onClick={() => deleteConv(menuConv)}>
+                🗑 Supprimer
+              </MenuItem>
+            </div>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="px-3 pb-[4px] font-mono text-[11px] tracking-[0.06em] text-faint">
+        {title}
+      </div>
+      <div className="flex flex-col gap-[2px]">{children}</div>
+    </div>
+  );
+}
+
+function MenuItem({
+  children,
+  onClick,
+  danger = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full truncate rounded-md px-3 py-[8px] text-left text-[13.5px] transition hover:bg-white/[.05] ${
+        danger ? "text-danger-fg" : "text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

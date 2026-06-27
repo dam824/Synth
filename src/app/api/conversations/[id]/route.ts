@@ -77,3 +77,101 @@ export async function GET(
       : null,
   });
 }
+
+// Met à jour une conversation : renommer, épingler, archiver, déplacer.
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+  const { id } = await params;
+
+  const owned = await prisma.conversation.findFirst({
+    where: { id, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  }
+
+  let body: {
+    title?: unknown;
+    pinned?: unknown;
+    archived?: unknown;
+    projectId?: unknown;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Corps JSON invalide" }, { status: 400 });
+  }
+
+  const data: {
+    title?: string;
+    pinned?: boolean;
+    archived?: boolean;
+    projectId?: string | null;
+  } = {};
+
+  if (typeof body.title === "string" && body.title.trim()) {
+    data.title = body.title.trim().slice(0, 120);
+  }
+  if (typeof body.pinned === "boolean") data.pinned = body.pinned;
+  if (typeof body.archived === "boolean") data.archived = body.archived;
+  if (body.projectId === null || typeof body.projectId === "string") {
+    // Vérifie que le projet cible appartient à l'utilisateur.
+    if (typeof body.projectId === "string") {
+      const project = await prisma.project.findFirst({
+        where: { id: body.projectId, userId: session.user.id },
+        select: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json(
+          { error: "Projet introuvable" },
+          { status: 400 },
+        );
+      }
+    }
+    data.projectId = body.projectId;
+  }
+
+  const updated = await prisma.conversation.update({
+    where: { id },
+    data,
+    select: {
+      id: true,
+      title: true,
+      pinned: true,
+      archived: true,
+      projectId: true,
+    },
+  });
+
+  return NextResponse.json({ conversation: updated });
+}
+
+// Supprime une conversation (et ses prompts/réponses en cascade).
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+  const { id } = await params;
+
+  const owned = await prisma.conversation.findFirst({
+    where: { id, userId: session.user.id },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  }
+
+  await prisma.conversation.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
