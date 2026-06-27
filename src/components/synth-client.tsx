@@ -219,6 +219,50 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     abortRef.current?.abort();
   }
 
+  // Recharge le dernier échange d'une conversation dans la fenêtre principale.
+  async function openConversation(id: string) {
+    abortRef.current?.abort();
+    setActiveConversationId(id);
+    setErrorMsg("");
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      if (!res.ok) throw new Error("load failed");
+      const data = await res.json();
+
+      if (!data.prompt) {
+        setPhase("empty");
+        setResult(null);
+        setAskedQuestion("");
+        return;
+      }
+
+      const providers = (data.prompt.providers ?? []) as ProviderView[];
+      const newSteps = emptySteps();
+      for (const pv of providers) {
+        newSteps[pv.provider] = {
+          status: pv.ok ? "ok" : "fail",
+          latencyMs: pv.latencyMs,
+          error: pv.error,
+          content: pv.content,
+        };
+      }
+      setSteps(newSteps);
+
+      if (data.prompt.final) {
+        setAskedQuestion(data.prompt.content);
+        setResult({ conversationId: id, final: data.prompt.final, providers });
+        setJudging("ok");
+        setPhase("answer");
+      } else {
+        setPhase("empty");
+        setResult(null);
+      }
+    } catch {
+      setErrorMsg("Impossible de charger la conversation.");
+      setPhase("error");
+    }
+  }
+
   function newQuestion(freshConversation = false) {
     abortRef.current?.abort();
     if (freshConversation) setActiveConversationId(null);
@@ -274,7 +318,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
           {conversations.map((c) => (
             <button
               key={c.id}
-              onClick={() => setActiveConversationId(c.id)}
+              onClick={() => openConversation(c.id)}
               title={c.title}
               className={`truncate rounded-[9px] px-3 py-[10px] text-left text-[13.5px] leading-[1.4] transition hover:bg-white/[.04] ${
                 activeConversationId === c.id
