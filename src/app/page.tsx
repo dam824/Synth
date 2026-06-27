@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { auth } from "@/auth";
 import { Diamond, Logo } from "@/components/brand";
+import { NeonBorder } from "@/components/neon-border";
 
 const STEPS = [
   {
@@ -108,8 +109,12 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Aperçu produit (glass) */}
-          <div className="glass animate-synth-float overflow-hidden rounded-[18px]">
+          {/* Aperçu produit (bordure néon + flottement) */}
+          <NeonBorder
+            radius={18}
+            className="animate-synth-float"
+            innerClassName="overflow-hidden"
+          >
             <div className="flex items-center gap-[7px] border-b border-white/[.06] px-4 py-[13px]">
               <span className="h-[9px] w-[9px] rounded-full bg-[#26342D]" />
               <span className="h-[9px] w-[9px] rounded-full bg-[#26342D]" />
@@ -143,7 +148,7 @@ export default async function HomePage() {
                 fiscalité allégée.
               </p>
             </div>
-          </div>
+          </NeonBorder>
         </header>
 
         {/* Workflow */}
@@ -156,7 +161,10 @@ export default async function HomePage() {
           </h2>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-3">
             {STEPS.map((s) => (
-              <div key={s.n} className="glass rounded-xl p-[26px]">
+              <div
+                key={s.n}
+                className="glass rounded-xl p-[26px] transition duration-200 hover:-translate-y-1 hover:shadow-glow"
+              >
                 <div className="glass-accent mb-[18px] flex h-[38px] w-[38px] items-center justify-center rounded-[11px] text-[15px] font-bold text-accent">
                   {s.n}
                 </div>
@@ -188,7 +196,7 @@ export default async function HomePage() {
                 Trois réponses différentes. Laquelle croire ? Vous arbitrez seul.
               </p>
             </div>
-            <div className="glass rounded-xl p-7 shadow-accent">
+            <NeonBorder radius={16} className="shadow-accent" innerClassName="p-7">
               <p className="m-0 mb-4 font-mono text-[12px] text-accent">APRÈS</p>
               <p className="m-0 mb-4 text-[17px] font-semibold">
                 Une réponse. La bonne.
@@ -201,7 +209,7 @@ export default async function HomePage() {
               <p className="mb-0 mt-[18px] text-[14px] leading-[1.5] text-muted-fg">
                 SYNTH a déjà fait l&apos;arbitrage. Vous lisez, vous décidez.
               </p>
-            </div>
+            </NeonBorder>
           </div>
         </section>
 
@@ -224,21 +232,28 @@ export default async function HomePage() {
           <h2 className="m-0 mb-[22px] text-[24px] font-bold tracking-[-0.02em]">
             Pour vos vraies questions
           </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {EXAMPLES.map((ex) => (
-              <div
-                key={ex}
-                className="glass-soft rounded-[13px] px-5 py-[18px] text-[15px] text-muted-fg"
-              >
-                {ex}
-              </div>
-            ))}
+          <div className="marquee-mask overflow-hidden">
+            <div className="animate-synth-marquee flex w-max gap-3">
+              {[...EXAMPLES, ...EXAMPLES].map((ex, i) => (
+                <div
+                  key={i}
+                  className="glass-soft w-[320px] shrink-0 rounded-[13px] px-5 py-[18px] text-[15px] text-muted-fg"
+                >
+                  {ex}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
         {/* CTA */}
-        <section className="glass my-[50px] rounded-[22px] px-8 py-[54px] text-center shadow-accent">
-          <h2 className="m-0 mb-3 text-[34px] font-bold tracking-[-0.03em] text-foreground">
+        <section className="my-[50px]">
+          <NeonBorder
+            radius={22}
+            className="shadow-accent"
+            innerClassName="px-8 py-[54px] text-center"
+          >
+            <h2 className="m-0 mb-3 text-[34px] font-bold tracking-[-0.03em] text-foreground">
             Vous posez la question.
             <br />
             <span className="bg-gradient-to-r from-accent to-[#7FF0C2] bg-clip-text text-transparent drop-shadow-[0_0_22px_rgba(43,245,168,.35)]">
@@ -254,6 +269,7 @@ export default async function HomePage() {
           >
             Demander à SYNTH
           </Link>
+          </NeonBorder>
         </section>
 
         {/* Footer */}

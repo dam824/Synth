@@ -201,6 +201,65 @@ body {
   animation: synthFloat 7s ease-in-out infinite;
 }
 
+@keyframes synthSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-synth-spin {
+  animation: synthSpin 6s linear infinite;
+}
+
+@keyframes synthMarquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-synth-marquee {
+  animation: synthMarquee 32s linear infinite;
+}
+/* Masque dégradé sur les bords du carrousel */
+.marquee-mask {
+  -webkit-mask: linear-gradient(
+    to right,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+  mask: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* Bordure néon rotative : un arc conique qui tourne derrière un cœur opaque. */
+.neon-border {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.neon-border::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  z-index: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 280deg,
+    rgba(43, 245, 168, 0.15) 320deg,
+    #2bf5a8 350deg,
+    #7ff0c2 358deg,
+    transparent 360deg
+  );
+  animation: synthSpin 6s linear infinite;
+}
+.neon-border > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Respecter prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .animate-synth-rise,
@@ -208,8 +267,11 @@ body {
   .animate-synth-bar,
   .animate-synth-glow,
   .animate-synth-float,
+  .animate-synth-spin,
+  .animate-synth-marquee,
   .synth-orbs::before,
-  .synth-orbs::after {
+  .synth-orbs::after,
+  .neon-border::before {
     animation: none;
   }
 }
