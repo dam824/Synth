@@ -493,9 +493,10 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="relative flex h-screen overflow-hidden">
+      <div className="synth-orbs" />
       {/* Sidebar */}
-      <aside className="synth-scroll hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-border-soft bg-surface-soft lg:flex">
+      <aside className="synth-scroll relative z-10 hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-border-soft glass-soft lg:flex">
         <div className="space-y-2 px-4 pb-[10px] pt-4">
           <button
             onClick={() => newQuestion(true)}
@@ -593,8 +594,8 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       </aside>
 
       {/* Main */}
-      <main className="synth-scroll flex flex-1 flex-col overflow-y-auto">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border-soft bg-background/85 px-6 py-[14px] backdrop-blur">
+      <main className="synth-scroll relative z-10 flex flex-1 flex-col overflow-y-auto">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[rgba(43,245,168,.12)] bg-[rgba(8,12,11,.55)] px-6 py-[14px] backdrop-blur-xl">
           <Logo size={15} />
           <span className="font-mono text-[11px] text-faint">{headerNote}</span>
         </header>
@@ -602,7 +603,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         {phase === "empty" ? (
           <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col px-6 pb-10 pt-6">
             <div className="animate-synth-rise flex flex-1 flex-col items-center justify-center py-[30px] text-center">
-              <div className="mb-5 flex h-[46px] w-[46px] items-center justify-center rounded-[13px] bg-accent-soft shadow-glow">
+              <div className="glass-accent animate-synth-float mb-5 flex h-[46px] w-[46px] items-center justify-center rounded-[13px] shadow-glow">
                 <Diamond size={16} />
               </div>
               <h1 className="m-0 mb-[9px] text-[26px] font-semibold tracking-[-0.02em]">
@@ -668,7 +669,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
 
               {phase === "answer" && result && (
                 <div className="animate-synth-rise">
-                  <div className="mb-[22px] flex items-start gap-[11px] rounded-[13px] border border-border bg-surface px-[17px] py-[15px]">
+                  <div className="glass-soft mb-[22px] flex items-start gap-[11px] rounded-[13px] px-[17px] py-[15px]">
                     <span className="pt-[2px] font-mono text-[12px] text-faint">
                       Q
                     </span>
@@ -751,7 +752,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
 
             {/* Colonne « processus » */}
             <aside className="lg:sticky lg:top-[84px] lg:self-start">
-              <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="glass rounded-xl p-4">
                 <p className="mb-4 font-mono text-[11px] tracking-[0.08em] text-faint">
                   LE PROCESSUS
                 </p>
@@ -797,7 +798,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         {showComposer && (
           <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-6 pb-[22px] pt-[14px]">
             <div className="mx-auto max-w-[720px]">
-              <div className="rounded-xl border border-border bg-surface p-2 shadow-composer focus-within:border-[rgba(43,245,168,.5)]">
+              <div className="glass rounded-xl p-2 focus-within:border-[rgba(43,245,168,.5)]">
                 <textarea
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
@@ -839,7 +840,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
           <div
-            className="fixed z-50 w-[224px] rounded-xl border border-border bg-surface p-1 shadow-card"
+            className="glass fixed z-50 w-[224px] rounded-xl p-1"
             style={{ top: menuPos.top, left: menuPos.left }}
             onClick={(e) => e.stopPropagation()}
           >

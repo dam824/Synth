@@ -35,7 +35,10 @@ yarn-error.log*
 # Documentation interne — ne jamais pousser
 /docs/
 *.md
+CREDITS_BUSINESS_MODEL.md
 
-# Dossiers de direction design — ne jamais pousser
+# Dossiers de direction design — ne jamais pousser (toutes casses)
 /synth-direction-ux-ui/
 /design/
+/Design/
+**/synth-direction-ux-ui*/

@@ -104,12 +104,112 @@ body {
   animation: synthGlow 2s ease-in-out infinite;
 }
 
+/* ---------------------------------------------------------------------------
+   Glassmorphisme
+--------------------------------------------------------------------------- */
+.glass {
+  background: rgba(12, 20, 17, 0.55);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(43, 245, 168, 0.16);
+  box-shadow:
+    0 10px 40px -24px rgba(43, 245, 168, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.glass-soft {
+  background: rgba(12, 20, 17, 0.42);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.glass-accent {
+  background: rgba(43, 245, 168, 0.12);
+  border: 1px solid rgba(43, 245, 168, 0.4);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Halos néon ambiants (fond animé) */
+.synth-orbs {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.synth-orbs::before,
+.synth-orbs::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(24px);
+}
+.synth-orbs::before {
+  top: -140px;
+  left: 50%;
+  width: 680px;
+  height: 680px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    circle at center,
+    rgba(43, 245, 168, 0.16),
+    transparent 64%
+  );
+  animation: synthDrift 16s ease-in-out infinite;
+}
+.synth-orbs::after {
+  bottom: -180px;
+  right: -120px;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(
+    circle at center,
+    rgba(20, 185, 160, 0.13),
+    transparent 66%
+  );
+  animation: synthDrift2 20s ease-in-out infinite;
+}
+
+@keyframes synthDrift {
+  0%,
+  100% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50%, 40px) scale(1.12);
+  }
+}
+@keyframes synthDrift2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50px, -30px) scale(1.1);
+  }
+}
+@keyframes synthFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+.animate-synth-float {
+  animation: synthFloat 7s ease-in-out infinite;
+}
+
 /* Respecter prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .animate-synth-rise,
   .animate-synth-pulse,
   .animate-synth-bar,
-  .animate-synth-glow {
+  .animate-synth-glow,
+  .animate-synth-float,
+  .synth-orbs::before,
+  .synth-orbs::after {
     animation: none;
   }
 }
