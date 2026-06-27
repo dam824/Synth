@@ -1,0 +1,12 @@
+# Reverse proxy Caddy avec HTTPS automatique (Let's Encrypt).
+# Remplacer "synth.example.com" par le futur domaine, et l'email pour les certificats.
+# Caddy redirige le trafic vers le service "app" (Next.js) sur le port 3000.
+
+{
+	email admin@example.com
+}
+
+synth.example.com {
+	encode gzip zstd
+	reverse_proxy app:3000
+}
