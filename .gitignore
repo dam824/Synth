@@ -9,6 +9,9 @@
 /build
 next-env.d.ts
 
+# Artefacts TypeScript
+*.tsbuildinfo
+
 # Prisma
 /prisma/migrations/dev.db*
 
