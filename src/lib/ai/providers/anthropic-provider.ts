@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { PROVIDER_SYSTEM_PROMPT } from "../prompts";
-import type { ProviderCallOutput } from "../types";
+import type { ProviderCallOutput, UserAttachment } from "../types";
 
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
@@ -9,6 +9,8 @@ const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 export async function callAnthropic(
   prompt: string,
   signal?: AbortSignal,
+  model = DEFAULT_MODEL,
+  attachments: UserAttachment[] = [],
 ): Promise<ProviderCallOutput> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -17,25 +19,50 @@ export async function callAnthropic(
 
   const client = new Anthropic({ apiKey });
 
+  const textAttachments = attachments.filter((a) => a.kind === "text");
+  const imageAttachments = attachments.filter((a) => a.kind === "image");
+  const textContext =
+    textAttachments.length > 0
+      ? `\n\nDocuments joints :\n${textAttachments
+          .map((a) => `### ${a.name}\n${a.data}`)
+          .join("\n\n")}`
+      : "";
+  const userContent =
+    imageAttachments.length > 0
+      ? [
+          { type: "text" as const, text: `${prompt}${textContext}` },
+          ...imageAttachments.map((a) => ({
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: a.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: a.data,
+            },
+          })),
+        ]
+      : `${prompt}${textContext}`;
+
   const message = await client.messages.create(
     {
-      model: DEFAULT_MODEL,
+      model,
       max_tokens: 4096,
       system: PROVIDER_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
-    },
+      messages: [{ role: "user", content: userContent }],
+    } as Parameters<typeof client.messages.create>[0],
     { signal },
   );
 
-  const content = message.content
+  const blocks = (message as { content: Array<{ type: string; text?: string }> })
+    .content;
+  const responseContent = blocks
     .filter((block) => block.type === "text")
-    .map((block) => (block as { text: string }).text)
+    .map((block) => block.text ?? "")
     .join("\n")
     .trim();
 
-  if (!content) {
+  if (!responseContent) {
     throw new Error("Réponse Anthropic vide");
   }
 
-  return { content, model: DEFAULT_MODEL };
+  return { content: responseContent, model };
 }

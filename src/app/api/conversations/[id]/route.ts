@@ -22,7 +22,7 @@ export async function GET(
     include: {
       prompts: {
         orderBy: { createdAt: "desc" },
-        take: 1,
+        take: 20,
         include: { finalAnswer: true, modelResponses: true },
       },
     },
@@ -47,7 +47,25 @@ export async function GET(
     return first.slice(0, 90).trim() || "Réponse";
   };
 
-  const p = conversation.prompts[0];
+  const isPdfRefusal = (text: string): boolean => {
+    const normalized = text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return (
+      /je ne peux pas generer/.test(normalized) &&
+      /(fichier pdf|lien de telechargement|word|google docs|notion|canva)/.test(
+        normalized,
+      )
+    );
+  };
+
+  const p =
+    conversation.prompts.find(
+      (prompt) =>
+        prompt.finalAnswer && !isPdfRefusal(prompt.finalAnswer.content),
+    ) ??
+    conversation.prompts[0];
 
   return NextResponse.json({
     id: conversation.id,

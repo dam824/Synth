@@ -4,12 +4,22 @@ export type ProviderName = "openai" | "anthropic" | "gemini";
 
 export type ConfidenceLevel = "high" | "medium" | "low";
 
+export type ReflectionMode = "fast" | "deep";
+
+export interface UserAttachment {
+  kind: "image" | "text";
+  name: string;
+  mimeType: string;
+  data: string;
+}
+
 // Réponse normalisée d'un fournisseur (succès).
 export interface ProviderSuccess {
   provider: ProviderName;
   ok: true;
   content: string;
   model: string;
+  modelId?: string;
   latencyMs: number;
 }
 
@@ -18,6 +28,8 @@ export interface ProviderFailure {
   provider: ProviderName;
   ok: false;
   error: string;
+  model?: string;
+  modelId?: string;
   latencyMs: number;
 }
 

@@ -58,6 +58,12 @@ export default async function HomePage() {
           <Logo />
           <div className="flex items-center gap-2">
             <Link
+              href="/tarifs"
+              className="flex h-[38px] items-center rounded-[10px] px-[14px] text-[14px] font-medium text-muted-fg transition hover:bg-white/[.05] hover:text-foreground"
+            >
+              Tarifs
+            </Link>
+            <Link
               href="/login"
               className="flex h-[38px] items-center rounded-[10px] px-[14px] text-[14px] font-medium text-muted-fg transition hover:bg-white/[.05]"
             >

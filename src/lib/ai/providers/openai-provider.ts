@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 
 import { PROVIDER_SYSTEM_PROMPT } from "../prompts";
-import type { ProviderCallOutput } from "../types";
+import type { ProviderCallOutput, UserAttachment } from "../types";
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
 
@@ -10,6 +10,8 @@ const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
 export async function callOpenAI(
   prompt: string,
   signal?: AbortSignal,
+  model = DEFAULT_MODEL,
+  attachments: UserAttachment[] = [],
 ): Promise<ProviderCallOutput> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -18,12 +20,34 @@ export async function callOpenAI(
 
   const client = new OpenAI({ apiKey });
 
+  const textAttachments = attachments.filter((a) => a.kind === "text");
+  const imageAttachments = attachments.filter((a) => a.kind === "image");
+  const textContext =
+    textAttachments.length > 0
+      ? `\n\nDocuments joints :\n${textAttachments
+          .map((a) => `### ${a.name}\n${a.data}`)
+          .join("\n\n")}`
+      : "";
+
+  const userContent =
+    imageAttachments.length > 0
+      ? [
+          { type: "text" as const, text: `${prompt}${textContext}` },
+          ...imageAttachments.map((a) => ({
+            type: "image_url" as const,
+            image_url: {
+              url: `data:${a.mimeType};base64,${a.data}`,
+            },
+          })),
+        ]
+      : `${prompt}${textContext}`;
+
   const completion = await client.chat.completions.create(
     {
-      model: DEFAULT_MODEL,
+      model,
       messages: [
         { role: "system", content: PROVIDER_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
+        { role: "user", content: userContent },
       ],
     },
     { signal },
@@ -34,5 +58,5 @@ export async function callOpenAI(
     throw new Error("Réponse OpenAI vide");
   }
 
-  return { content, model: DEFAULT_MODEL };
+  return { content, model };
 }

@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 import { PROVIDER_SYSTEM_PROMPT } from "../prompts";
-import type { ProviderCallOutput } from "../types";
+import type { ProviderCallOutput, UserAttachment } from "../types";
 
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
@@ -11,6 +11,8 @@ export async function callGemini(
   // Le SDK Gemini ne gère pas l'AbortSignal ici ; paramètre accepté pour
   // garder une signature homogène avec les autres fournisseurs.
   _signal?: AbortSignal,
+  model = DEFAULT_MODEL,
+  attachments: UserAttachment[] = [],
 ): Promise<ProviderCallOutput> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -19,9 +21,30 @@ export async function callGemini(
 
   const ai = new GoogleGenAI({ apiKey });
 
+  const textAttachments = attachments.filter((a) => a.kind === "text");
+  const imageAttachments = attachments.filter((a) => a.kind === "image");
+  const textContext =
+    textAttachments.length > 0
+      ? `\n\nDocuments joints :\n${textAttachments
+          .map((a) => `### ${a.name}\n${a.data}`)
+          .join("\n\n")}`
+      : "";
+  const contents =
+    imageAttachments.length > 0
+      ? [
+          { text: `${prompt}${textContext}` },
+          ...imageAttachments.map((a) => ({
+            inlineData: {
+              mimeType: a.mimeType,
+              data: a.data,
+            },
+          })),
+        ]
+      : `${prompt}${textContext}`;
+
   const response = await ai.models.generateContent({
-    model: DEFAULT_MODEL,
-    contents: prompt,
+    model,
+    contents,
     config: {
       systemInstruction: PROVIDER_SYSTEM_PROMPT,
     },
@@ -32,5 +55,5 @@ export async function callGemini(
     throw new Error("Réponse Gemini vide");
   }
 
-  return { content, model: DEFAULT_MODEL };
+  return { content, model };
 }

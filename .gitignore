@@ -36,6 +36,7 @@ yarn-error.log*
 /docs/
 *.md
 CREDITS_BUSINESS_MODEL.md
+CREDITS_IMPLEMENTATION_PLAN.md
 
 # Dossiers de direction design — ne jamais pousser (toutes casses)
 /synth-direction-ux-ui/

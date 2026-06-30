@@ -4,10 +4,18 @@ import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 
 import { Diamond, Logo } from "@/components/brand";
+import {
+  DEFAULT_MODEL_ORDER,
+  getModelChoice,
+  isModelChoiceId,
+  MODEL_CHOICES,
+  type ModelChoiceId,
+} from "@/lib/ai/model-catalog";
 import type {
   ConfidenceLevel,
   JudgeResult,
   ProviderName,
+  ReflectionMode,
 } from "@/lib/ai/types";
 
 interface ConversationSummary {
@@ -36,10 +44,12 @@ interface Project {
 }
 
 type Phase = "empty" | "loading" | "answer" | "error";
-type StepStatus = "running" | "ok" | "fail";
+type StepStatus = "idle" | "running" | "ok" | "fail";
 
 interface ProviderStep {
   status: StepStatus;
+  modelId?: ModelChoiceId;
+  model?: string;
   latencyMs?: number;
   error?: string;
   content?: string;
@@ -60,14 +70,50 @@ interface FinalPayload {
   providers: ProviderView[];
 }
 
+interface ClarificationQuestion {
+  id: string;
+  label: string;
+  options: string[];
+}
+
+interface ClientAttachment {
+  kind: "image" | "text";
+  name: string;
+  mimeType: string;
+  data: string;
+  previewUrl?: string;
+}
+
+const CREDIT_USAGE = {
+  balance: 1285,
+  monthlyLimit: 1800,
+  freePromptsUsed: 3,
+  freePromptsLimit: 5,
+  spentThisMonth: 515,
+  projectedDays: 12,
+  breakdown: [
+    { label: "Synth multi-modèles", used: 315, limit: 900 },
+    { label: "Mode profond", used: 120, limit: 450 },
+    { label: "Images / documents", used: 80, limit: 250 },
+  ],
+};
+
 const PROVIDER_ORDER: ProviderName[] = ["openai", "anthropic", "gemini"];
 const PROVIDER_LABEL: Record<ProviderName, string> = {
   openai: "GPT",
   anthropic: "Claude",
   gemini: "Gemini",
 };
+const MODEL_LABEL = Object.fromEntries(
+  MODEL_CHOICES.map((model) => [model.id, model.shortLabel]),
+) as Record<ModelChoiceId, string>;
+const MODEL_SELECT_OPTIONS = MODEL_CHOICES.map((model) => ({
+  id: model.id,
+  label: `${model.family} · ${model.label}`,
+}));
 
 const STATUS_TEXT: Record<StepStatus, string> = {
+  idle: "en attente",
   running: "réfléchit…",
   ok: "a répondu",
   fail: "indisponible",
@@ -92,6 +138,823 @@ const CONFIDENCE: Record<
   },
 };
 
+const SPORT_NUTRITION_CLARIFICATIONS: ClarificationQuestion[] = [
+  {
+    id: "goal",
+    label: "Objectif principal",
+    options: ["Perdre du gras", "Prendre du muscle", "Me remettre en forme"],
+  },
+  {
+    id: "level",
+    label: "Niveau actuel",
+    options: ["Débutant", "Intermédiaire", "Avancé"],
+  },
+  {
+    id: "frequency",
+    label: "Disponibilité",
+    options: ["2-3 séances/semaine", "4 séances/semaine", "5+ séances/semaine"],
+  },
+  {
+    id: "nutrition",
+    label: "Nutrition",
+    options: ["Équilibrage simple", "Perte de poids", "Prise de masse"],
+  },
+];
+const MAX_ATTACHMENTS = 4;
+const MAX_IMAGE_BYTES = 4_800_000;
+const MAX_TEXT_BYTES = 240_000;
+const SUPPORTED_TEXT_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+]);
+
+function shouldClarify(prompt: string): boolean {
+  const text = prompt.toLowerCase();
+  const asksForNaming =
+    /(nom de marque|naming|proposition de nom|propositions de nom|idée de nom|idées de nom|liste de nom|marque|brand|branding|logo|slogan|positionnement)/.test(
+      text,
+    );
+  if (asksForNaming) return false;
+
+  const asksForProgram =
+    /(programme|plan|routine|planning|séance|seance|entrainement|entraînement|nutrition|repas|diète|diete|calories|protéine|proteine|perdre du gras|prendre du muscle|remise en forme)/.test(
+      text,
+    );
+  const sportContext =
+    /(sport|muscu|musculation|fitness|course|cardio|nutrition|repas|diète|diete|calories|protéine|proteine)/.test(
+      text,
+    );
+  const alreadySpecific =
+    /(semaine|séance|seance|kg|kilo|taille|poids|objectif|débutant|intermédiaire|avancé|blessure|allergie)/.test(
+      text,
+    );
+  return asksForProgram && sportContext && (!alreadySpecific || prompt.length < 180);
+}
+
+function buildClarifiedPrompt(
+  prompt: string,
+  answers: Record<string, string>,
+): string {
+  const details = SPORT_NUTRITION_CLARIFICATIONS.map((q) => {
+    const answer = answers[q.id];
+    return answer ? `- ${q.label} : ${answer}` : null;
+  })
+    .filter(Boolean)
+    .join("\n");
+
+  if (!details) return prompt;
+
+  return `${prompt}
+
+Précisions utilisateur :
+${details}
+
+Format attendu :
+- programme structuré et actionnable ;
+- tableau hebdomadaire si pertinent ;
+- partie nutrition claire ;
+- conseils de sécurité et adaptation.`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function extractMarkdownTables(markdown: string): string[][][] {
+  const lines = markdown.split("\n");
+  const tables: string[][][] = [];
+  let current: string[][] = [];
+
+  for (const line of lines) {
+    if (!line.trim().startsWith("|") || !line.includes("|")) {
+      if (current.length > 0) tables.push(current);
+      current = [];
+      continue;
+    }
+    const cells = line
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((cell) => cell.trim());
+    const isSeparator = cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+    if (!isSeparator) current.push(cells);
+  }
+  if (current.length > 0) tables.push(current);
+  return tables;
+}
+
+function toCsvCell(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function xmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function inlineMarkdown(value: string): string {
+  return escapeHtml(value)
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function markdownToHtml(markdown: string): string {
+  const lines = markdown.split("\n");
+  const html: string[] = [];
+  let paragraph: string[] = [];
+  let list: string[] = [];
+
+  function flushParagraph() {
+    if (paragraph.length === 0) return;
+    html.push(`<p>${paragraph.map(inlineMarkdown).join(" ")}</p>`);
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (list.length === 0) return;
+    html.push(`<ul>${list.map((item) => `<li>${inlineMarkdown(item)}</li>`).join("")}</ul>`);
+    list = [];
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] ?? "";
+    const line = raw.trim();
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    if (line.startsWith("|") && line.includes("|")) {
+      flushParagraph();
+      flushList();
+      const rows: string[][] = [];
+      while (index < lines.length) {
+        const tableLine = lines[index]?.trim() ?? "";
+        if (!tableLine.startsWith("|") || !tableLine.includes("|")) {
+          index -= 1;
+          break;
+        }
+        const cells = tableLine
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((cell) => cell.trim());
+        const separator = cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+        if (!separator) rows.push(cells);
+        index += 1;
+      }
+      if (rows.length > 0) {
+        const [head, ...body] = rows;
+        html.push(
+          `<table><thead><tr>${head
+            .map((cell) => `<th>${inlineMarkdown(cell)}</th>`)
+            .join("")}</tr></thead><tbody>${body
+            .map(
+              (row) =>
+                `<tr>${row
+                  .map((cell) => `<td>${inlineMarkdown(cell)}</td>`)
+                  .join("")}</tr>`,
+            )
+            .join("")}</tbody></table>`,
+        );
+      }
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const listItem = line.match(/^[-•]\s+(.+)$/);
+    if (listItem) {
+      flushParagraph();
+      list.push(listItem[1]);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+  return html.join("");
+}
+
+function buildPdfHtml(title: string, question: string, answer: string): string {
+  return `<div xmlns="http://www.w3.org/1999/xhtml" style="box-sizing:border-box;width:794px;background:#ffffff;color:#111827;font-family:Inter,Arial,sans-serif;padding:62px 58px 70px;">
+    <style>
+      *{box-sizing:border-box}
+      h1{font-size:34px;line-height:1.1;margin:0 0 16px;font-weight:800;color:#111827}
+      h2{font-size:25px;line-height:1.18;margin:26px 0 10px;font-weight:800;color:#111827}
+      h3{font-size:20px;line-height:1.25;margin:22px 0 9px;font-weight:800;color:#111827}
+      p{font-size:15px;line-height:1.55;margin:0 0 13px;color:#111827}
+      ul{font-size:15px;line-height:1.5;margin:8px 0 16px 20px;padding:0}
+      li{margin:0 0 6px}
+      table{width:100%;border-collapse:collapse;margin:13px 0 22px;font-size:13px;line-height:1.35}
+      th{background:#111827;color:#ffffff;text-align:left;font-weight:800;padding:9px 10px;border:1px solid #d1d5db}
+      td{padding:9px 10px;border:1px solid #d1d5db;vertical-align:top}
+      tr:nth-child(even) td{background:#f3f4f6}
+      code{background:#eef2f7;border-radius:4px;padding:1px 4px}
+      .meta{font-size:14px;color:#374151;margin-bottom:18px}
+      .note{background:#eef2f7;border-left:4px solid #111827;padding:12px 14px;margin:16px 0 20px;font-weight:700}
+      .footer{margin-top:34px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:12px;color:#64748b}
+    </style>
+    <h1>${inlineMarkdown(title || "Document SYNTH")}</h1>
+    <div class="meta">Question : ${inlineMarkdown(question || "Conversation SYNTH")}</div>
+    <div class="note">Document généré depuis la dernière réponse SYNTH.</div>
+    ${markdownToHtml(answer)}
+    <div class="footer">SYNTH export</div>
+  </div>`;
+}
+
+const WIN_ANSI: Record<string, number> = {
+  "€": 0x80,
+  "‚": 0x82,
+  "ƒ": 0x83,
+  "„": 0x84,
+  "…": 0x85,
+  "†": 0x86,
+  "‡": 0x87,
+  "ˆ": 0x88,
+  "‰": 0x89,
+  "Š": 0x8a,
+  "‹": 0x8b,
+  "Œ": 0x8c,
+  "Ž": 0x8e,
+  "‘": 0x91,
+  "’": 0x92,
+  "“": 0x93,
+  "”": 0x94,
+  "•": 0x95,
+  "–": 0x96,
+  "—": 0x97,
+  "˜": 0x98,
+  "™": 0x99,
+  "š": 0x9a,
+  "›": 0x9b,
+  "œ": 0x9c,
+  "ž": 0x9e,
+  "Ÿ": 0x9f,
+};
+
+function winAnsiHex(value: string): string {
+  return Array.from(value)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      const byte =
+        WIN_ANSI[char] ??
+        (code >= 0x20 && code <= 0x7e ? code : code >= 0xa0 && code <= 0xff ? code : 0x3f);
+      return byte.toString(16).padStart(2, "0");
+    })
+    .join("");
+}
+
+function pdfText(value: string): string {
+  return value
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+function wrapPdfText(text: string, maxWidth: number, fontSize: number): string[] {
+  const maxChars = Math.max(18, Math.floor(maxWidth / (fontSize * 0.48)));
+  const words = pdfText(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length > 0 ? lines : [""];
+}
+
+function createNativePdfBlob(title: string, question: string, answer: string): Blob {
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const marginX = 42;
+  const contentWidth = pageWidth - marginX * 2;
+  const pages: string[] = [""];
+  let pageIndex = 0;
+  let y = 778;
+
+  function cmd(value: string) {
+    pages[pageIndex] += `${value}\n`;
+  }
+
+  function addPage() {
+    pages.push("");
+    pageIndex = pages.length - 1;
+    y = 778;
+  }
+
+  function ensure(height: number) {
+    if (y - height < 70) addPage();
+  }
+
+  function fill(r: number, g: number, b: number, x: number, rectY: number, w: number, h: number) {
+    cmd(`${r} ${g} ${b} rg ${x} ${rectY} ${w} ${h} re f`);
+  }
+
+  function stroke(r: number, g: number, b: number, x: number, rectY: number, w: number, h: number) {
+    cmd(`${r} ${g} ${b} RG ${x} ${rectY} ${w} ${h} re S`);
+  }
+
+  function text(value: string, x: number, textY: number, size: number, bold = false, color = "0.067 0.094 0.153") {
+    const font = bold ? "F2" : "F1";
+    cmd(`BT /${font} ${size} Tf ${color} rg ${x} ${textY} Td <${winAnsiHex(value)}> Tj ET`);
+  }
+
+  function paragraph(value: string, size = 11.5, bold = false, x = marginX, width = contentWidth) {
+    const lines = wrapPdfText(value, width, size);
+    const lineHeight = size * 1.38;
+    ensure(lines.length * lineHeight + 8);
+    lines.forEach((line) => {
+      text(line, x, y, size, bold);
+      y -= lineHeight;
+    });
+    y -= 4;
+  }
+
+  function heading(value: string, level: number) {
+    const size = level === 1 ? 19 : level === 2 ? 16 : 13.5;
+    ensure(size * 1.6 + 8);
+    y -= level === 1 ? 10 : 6;
+    paragraph(value, size, true);
+  }
+
+  function table(rows: string[][]) {
+    if (rows.length === 0) return;
+    const cols = Math.min(4, Math.max(...rows.map((row) => row.length)));
+    const colWidth = contentWidth / cols;
+    const rowGap = 8;
+
+    rows.forEach((row, rowIndex) => {
+      const cellLines = Array.from({ length: cols }, (_, col) =>
+        wrapPdfText(row[col] ?? "", colWidth - 12, 8.7),
+      );
+      const rowHeight = Math.max(24, Math.max(...cellLines.map((lines) => lines.length)) * 11 + 12);
+      ensure(rowHeight + rowGap);
+      const top = y + 6;
+      const rectY = top - rowHeight;
+      if (rowIndex === 0) {
+        fill(0.067, 0.094, 0.153, marginX, rectY, contentWidth, rowHeight);
+      } else if (rowIndex % 2 === 0) {
+        fill(0.955, 0.965, 0.98, marginX, rectY, contentWidth, rowHeight);
+      }
+      stroke(0.82, 0.84, 0.87, marginX, rectY, contentWidth, rowHeight);
+      for (let col = 1; col < cols; col += 1) {
+        cmd(`0.82 0.84 0.87 RG ${marginX + colWidth * col} ${rectY} m ${marginX + colWidth * col} ${top} l S`);
+      }
+      cellLines.forEach((lines, col) => {
+        lines.slice(0, 4).forEach((line, lineIndex) => {
+          text(
+            line,
+            marginX + col * colWidth + 7,
+            top - 14 - lineIndex * 11,
+            8.7,
+            rowIndex === 0,
+            rowIndex === 0 ? "1 1 1" : "0.067 0.094 0.153",
+          );
+        });
+      });
+      y = rectY - rowGap;
+    });
+  }
+
+  fill(0.95, 0.97, 0.98, marginX, 736, contentWidth, 40);
+  text(title || "Document SYNTH", marginX, 790, 22, true);
+  paragraph(`Question : ${question || "Conversation SYNTH"}`, 10.5, false);
+  y -= 2;
+  paragraph("Document généré depuis la dernière réponse SYNTH.", 10.5, true);
+
+  const lines = answer.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] ?? "";
+    const line = raw.trim();
+    if (!line) {
+      y -= 8;
+      continue;
+    }
+
+    if (line.startsWith("|") && line.includes("|")) {
+      const rows: string[][] = [];
+      while (index < lines.length) {
+        const tableLine = lines[index]?.trim() ?? "";
+        if (!tableLine.startsWith("|") || !tableLine.includes("|")) {
+          index -= 1;
+          break;
+        }
+        const cells = tableLine
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((cell) => cell.trim());
+        const separator = cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+        if (!separator) rows.push(cells);
+        index += 1;
+      }
+      table(rows);
+      continue;
+    }
+
+    const matchHeading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (matchHeading) {
+      heading(matchHeading[2], matchHeading[1].length);
+      continue;
+    }
+
+    const matchList = line.match(/^[-•]\s+(.+)$/);
+    if (matchList) {
+      paragraph(`• ${matchList[1]}`, 11.2, false, marginX + 10, contentWidth - 10);
+      continue;
+    }
+
+    paragraph(line);
+  }
+
+  pages.forEach((_, index) => {
+    const footer = `BT /F1 9 Tf 0.39 0.45 0.55 rg ${marginX} 34 Td <${winAnsiHex("SYNTH export")}> Tj ET
+BT /F1 9 Tf 0.39 0.45 0.55 rg 520 34 Td <${winAnsiHex(`Page ${index + 1}`)}> Tj ET`;
+    pages[index] += footer;
+  });
+
+  const objects: string[] = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  const pageObjectIds = pages.map((_, index) => 3 + index * 2);
+  objects.push(`<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+  const fontRegularId = 3 + pages.length * 2;
+  const fontBoldId = fontRegularId + 1;
+
+  pages.forEach((content, index) => {
+    const pageId = 3 + index * 2;
+    const contentId = pageId + 1;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> >> /Contents ${contentId} 0 R >>`,
+    );
+    objects.push(`<< /Length ${content.length} >>\nstream\n${content}endstream`);
+  });
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
+async function createStyledPdfBlob(title: string, question: string, answer: string): Promise<Blob> {
+  return createNativePdfBlob(title, question, answer);
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let c = index;
+  for (let k = 0; k < 8; k += 1) {
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return c >>> 0;
+});
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipDateParts(date = new Date()) {
+  const time =
+    (date.getHours() << 11) |
+    (date.getMinutes() << 5) |
+    Math.floor(date.getSeconds() / 2);
+  const dosDate =
+    ((date.getFullYear() - 1980) << 9) |
+    ((date.getMonth() + 1) << 5) |
+    date.getDate();
+  return { time, date: dosDate };
+}
+
+function writeU16(view: DataView, offset: number, value: number) {
+  view.setUint16(offset, value, true);
+}
+
+function writeU32(view: DataView, offset: number, value: number) {
+  view.setUint32(offset, value >>> 0, true);
+}
+
+function createZipBlob(files: Array<{ name: string; content: string }>): Blob {
+  const encoder = new TextEncoder();
+  const parts: BlobPart[] = [];
+  const centralParts: BlobPart[] = [];
+  const { time, date } = zipDateParts();
+  let offset = 0;
+  let centralSize = 0;
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const data = encoder.encode(file.content);
+    const crc = crc32(data);
+
+    const local = new ArrayBuffer(30 + nameBytes.length);
+    const localView = new DataView(local);
+    writeU32(localView, 0, 0x04034b50);
+    writeU16(localView, 4, 20);
+    writeU16(localView, 6, 0x0800);
+    writeU16(localView, 8, 0);
+    writeU16(localView, 10, time);
+    writeU16(localView, 12, date);
+    writeU32(localView, 14, crc);
+    writeU32(localView, 18, data.byteLength);
+    writeU32(localView, 22, data.byteLength);
+    writeU16(localView, 26, nameBytes.length);
+    writeU16(localView, 28, 0);
+    new Uint8Array(local, 30).set(nameBytes);
+
+    parts.push(local, data);
+
+    const central = new ArrayBuffer(46 + nameBytes.length);
+    const centralView = new DataView(central);
+    writeU32(centralView, 0, 0x02014b50);
+    writeU16(centralView, 4, 20);
+    writeU16(centralView, 6, 20);
+    writeU16(centralView, 8, 0x0800);
+    writeU16(centralView, 10, 0);
+    writeU16(centralView, 12, time);
+    writeU16(centralView, 14, date);
+    writeU32(centralView, 16, crc);
+    writeU32(centralView, 20, data.byteLength);
+    writeU32(centralView, 24, data.byteLength);
+    writeU16(centralView, 28, nameBytes.length);
+    writeU16(centralView, 30, 0);
+    writeU16(centralView, 32, 0);
+    writeU16(centralView, 34, 0);
+    writeU16(centralView, 36, 0);
+    writeU32(centralView, 38, 0);
+    writeU32(centralView, 42, offset);
+    new Uint8Array(central, 46).set(nameBytes);
+    centralParts.push(central);
+    centralSize += central.byteLength;
+    offset += local.byteLength + data.byteLength;
+  });
+
+  const centralOffset = offset;
+  parts.push(...centralParts);
+
+  const end = new ArrayBuffer(22);
+  const endView = new DataView(end);
+  writeU32(endView, 0, 0x06054b50);
+  writeU16(endView, 4, 0);
+  writeU16(endView, 6, 0);
+  writeU16(endView, 8, files.length);
+  writeU16(endView, 10, files.length);
+  writeU32(endView, 12, centralSize);
+  writeU32(endView, 16, centralOffset);
+  writeU16(endView, 20, 0);
+  parts.push(end);
+
+  return new Blob(parts, {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+function excelColumn(index: number): string {
+  let n = index + 1;
+  let column = "";
+  while (n > 0) {
+    const mod = (n - 1) % 26;
+    column = String.fromCharCode(65 + mod) + column;
+    n = Math.floor((n - mod) / 26);
+  }
+  return column;
+}
+
+function sanitizeSheetName(name: string, fallback: string): string {
+  const cleaned = name.replace(/[\]\\/*?:[\]]/g, " ").trim();
+  return (cleaned || fallback).slice(0, 31);
+}
+
+function safeFilename(value: string, fallback: string): string {
+  return (
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 70) || fallback
+  );
+}
+
+function worksheetXml(rows: string[][]): string {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const cols = Array.from(
+    { length: columnCount },
+    (_, index) =>
+      `<col min="${index + 1}" max="${index + 1}" width="${index === 0 ? 24 : 42}" customWidth="1"/>`,
+  ).join("");
+  const sheetRows = rows
+    .map((row, rowIndex) => {
+      const r = rowIndex + 1;
+      const cells = row
+        .map((value, colIndex) => {
+          const ref = `${excelColumn(colIndex)}${r}`;
+          const style = rowIndex === 0 ? ' s="1"' : "";
+          return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${r}">${cells}</row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <cols>${cols}</cols>
+  <sheetData>${sheetRows}</sheetData>
+</worksheet>`;
+}
+
+function xlsxWorkbookBlob(sheets: Array<{ name: string; rows: string[][] }>): Blob {
+  const safeSheets = sheets.map((sheet, index) => ({
+    name: sanitizeSheetName(sheet.name, `Feuille ${index + 1}`),
+    rows: sheet.rows.length > 0 ? sheet.rows : [["Contenu"], [""]],
+  }));
+  const sheetDefs = safeSheets
+    .map(
+      (sheet, index) =>
+        `<sheet name="${xmlEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
+    )
+    .join("");
+  const sheetRels = safeSheets
+    .map(
+      (_, index) =>
+        `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`,
+    )
+    .join("");
+  const overrides = safeSheets
+    .map(
+      (_, index) =>
+        `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+    )
+    .join("");
+
+  const files = [
+    {
+      name: "[Content_Types].xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${overrides}
+</Types>`,
+    },
+    {
+      name: "_rels/.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/workbook.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>${sheetDefs}</sheets>
+</workbook>`,
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${sheetRels}
+  <Relationship Id="rId${safeSheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/styles.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>
+</styleSheet>`,
+    },
+    ...safeSheets.map((sheet, index) => ({
+      name: `xl/worksheets/sheet${index + 1}.xml`,
+      content: worksheetXml(sheet.rows),
+    })),
+  ];
+
+  return createZipBlob(files);
+}
+
+function buildWorkbookSheets(result: FinalPayload, question: string) {
+  const answer = result.final.finalAnswer;
+  const tables = extractMarkdownTables(answer);
+  const summaryRows = [
+    ["Champ", "Valeur"],
+    ["Titre", result.final.title],
+    ["Question", question],
+    ["Confiance", result.final.confidence],
+    ["Réponse", pdfText(answer)],
+    ...result.final.keyPoints.map((point, index) => [
+      `Point clé ${index + 1}`,
+      pdfText(point),
+    ]),
+  ];
+
+  const sheets = [{ name: "Synthèse", rows: summaryRows }];
+  tables.forEach((table, index) => {
+    sheets.push({
+      name: `Tableau ${index + 1}`,
+      rows: table.map((row) => row.map(pdfText)),
+    });
+  });
+  return sheets;
+}
+
+function percent(used: number, limit: number): number {
+  if (limit <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((used / limit) * 100)));
+}
+
+function inferTextMimeType(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".md")) return "text/markdown";
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".json")) return "application/json";
+  return "text/plain";
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function getExportIntent(prompt: string): "pdf" | "xlsx" | null {
+  const text = prompt
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const asksForDocumentAction =
+    /(telecharg|download|dl|lien|export|genere|cree|fais|donne|renvoi|envoie|sort|refais|refaire|modifie|modifier|ameliore|ameliorer|mets|mettre|ajoute|ajouter|couleur|colore|forme|mise en forme|tableau|format)/.test(
+      text,
+    );
+  const wantsPdf = /\b(pdf|imprimer|document|page|brochure|presentation)\b/.test(text);
+  const wantsExcel = /\b(excel|xlsx|csv|tableur|feuille|classeur)\b/.test(text);
+  if (!asksForDocumentAction && !wantsPdf && !wantsExcel) return null;
+  if (wantsExcel) return "xlsx";
+  if (wantsPdf) return "pdf";
+  return null;
+}
+
 function initials(email: string): string {
   const name = email.split("@")[0] ?? "";
   const parts = name.split(/[.\-_]/).filter(Boolean);
@@ -101,14 +964,16 @@ function initials(email: string): string {
 
 function emptySteps(): Record<ProviderName, ProviderStep> {
   return {
-    openai: { status: "running" },
-    anthropic: { status: "running" },
-    gemini: { status: "running" },
+    openai: { status: "idle" },
+    anthropic: { status: "idle" },
+    gemini: { status: "idle" },
   };
 }
 
 export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   const [question, setQuestion] = useState("");
+  const [attachments, setAttachments] = useState<ClientAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [askedQuestion, setAskedQuestion] = useState("");
   const [phase, setPhase] = useState<Phase>("empty");
   const [steps, setSteps] = useState<Record<ProviderName, ProviderStep>>(
@@ -118,6 +983,18 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   const [result, setResult] = useState<FinalPayload | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [toast, setToast] = useState(false);
+  const [exportFile, setExportFile] = useState<{
+    url: string;
+    filename: string;
+    label: string;
+    type: "pdf" | "xlsx";
+  } | null>(null);
+  const [memoryNotice, setMemoryNotice] = useState<{
+    totalTurns: number;
+    includedTurns: number;
+    truncated: boolean;
+    shouldSuggestNewConversation: boolean;
+  } | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(null);
@@ -142,6 +1019,23 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectError, setProjectError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [clarificationPrompt, setClarificationPrompt] = useState("");
+  const [clarificationAnswers, setClarificationAnswers] = useState<
+    Record<string, string>
+  >({});
+  const [clarificationOther, setClarificationOther] = useState<
+    Record<string, string>
+  >({});
+  const [reflectionMode, setReflectionMode] =
+    useState<ReflectionMode>("fast");
+  const [modelOrder, setModelOrder] =
+    useState<ModelChoiceId[]>(DEFAULT_MODEL_ORDER);
+  const [activeModelOrder, setActiveModelOrder] =
+    useState<ModelChoiceId[]>(DEFAULT_MODEL_ORDER);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -163,13 +1057,36 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const currentPrompt = question.trim();
+    if (
+      clarificationPrompt &&
+      currentPrompt &&
+      currentPrompt !== clarificationPrompt &&
+      !shouldClarify(currentPrompt)
+    ) {
+      setClarificationPrompt("");
+      setClarificationAnswers({});
+      setClarificationOther({});
+    }
+  }, [question, clarificationPrompt]);
+
+  useEffect(() => {
+    return () => {
+      if (exportFile) URL.revokeObjectURL(exportFile.url);
+    };
+  }, [exportFile]);
+
   async function run(prompt: string) {
     setAskedQuestion(prompt);
     setPhase("loading");
     setSteps(emptySteps());
+    setActiveModelOrder(modelOrder);
     setJudging(null);
     setResult(null);
     setErrorMsg("");
+    setMemoryNotice(null);
+    setExportFile(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -178,7 +1095,13 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       const res = await fetch("/api/synth/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, conversationId: activeConversationId }),
+        body: JSON.stringify({
+          prompt,
+          conversationId: activeConversationId,
+          reflectionMode,
+          modelOrder,
+          attachments: attachments.map(({ previewUrl: _previewUrl, ...a }) => a),
+        }),
         signal: controller.signal,
       });
 
@@ -227,13 +1150,52 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         if (typeof ev.conversationId === "string") {
           setActiveConversationId(ev.conversationId);
         }
+        if (Array.isArray(ev.modelOrder)) {
+          const nextOrder = ev.modelOrder.filter(isModelChoiceId);
+          if (nextOrder.length === DEFAULT_MODEL_ORDER.length) {
+            setActiveModelOrder(nextOrder);
+          }
+        }
+        setSteps(emptySteps());
+        setJudging(null);
+        if (
+          ev.memory &&
+          typeof ev.memory === "object" &&
+          "shouldSuggestNewConversation" in ev.memory
+        ) {
+          setMemoryNotice(
+            ev.memory as {
+              totalTurns: number;
+              includedTurns: number;
+              truncated: boolean;
+              shouldSuggestNewConversation: boolean;
+            },
+          );
+        }
         break;
+      case "provider_start": {
+        const provider = ev.provider as ProviderName;
+        setSteps((s) => ({
+          ...s,
+          [provider]: {
+            status: "running",
+            modelId: isModelChoiceId(ev.modelId) ? ev.modelId : undefined,
+            model: typeof ev.model === "string" ? ev.model : undefined,
+          },
+        }));
+        break;
+      }
       case "provider_done": {
         const provider = ev.provider as ProviderName;
         setSteps((s) => ({
           ...s,
           [provider]: {
             status: ev.ok ? "ok" : "fail",
+            modelId: isModelChoiceId(ev.modelId) ? ev.modelId : s[provider]?.modelId,
+            model:
+              typeof ev.model === "string"
+                ? ev.model
+                : s[provider]?.model,
             latencyMs: ev.latencyMs as number,
             error: ev.error as string | undefined,
             content: ev.content as string | undefined,
@@ -249,6 +1211,8 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
         setResult(ev as unknown as FinalPayload);
         setPhase("answer");
         setQuestion("");
+        setAttachments([]);
+        setAttachmentError("");
         // Rafraîchit la liste pour faire apparaître la nouvelle conversation.
         refreshSidebar();
         break;
@@ -263,9 +1227,192 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   }
 
   function submit() {
-    const q = question.trim();
+    const q = question.trim() || (attachments.length > 0 ? "Analyse les pièces jointes." : "");
     if (!q || phase === "loading") return;
+    const exportIntent = result ? getExportIntent(q) : null;
+    if (exportIntent === "pdf") {
+      setQuestion("");
+      void exportPdf();
+      return;
+    }
+    if (exportIntent === "xlsx") {
+      setQuestion("");
+      exportExcel();
+      return;
+    }
+    const needsClarification = shouldClarify(q);
+    if (needsClarification && clarificationPrompt !== q) {
+      setClarificationPrompt(q);
+      setClarificationAnswers({});
+      setClarificationOther({});
+      return;
+    }
+    if (!needsClarification && clarificationPrompt) {
+      setClarificationPrompt("");
+      setClarificationAnswers({});
+      setClarificationOther({});
+    }
     run(q);
+  }
+
+  async function addFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setAttachmentError("");
+    const remaining = MAX_ATTACHMENTS - attachments.length;
+    const selected = Array.from(files).slice(0, Math.max(0, remaining));
+    if (selected.length < files.length) {
+      setAttachmentError(`Limite : ${MAX_ATTACHMENTS} pièces jointes maximum.`);
+    }
+
+    const next: ClientAttachment[] = [];
+    for (const file of selected) {
+      if (file.type.startsWith("image/")) {
+        if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+          setAttachmentError("Images acceptées : PNG, JPG, WEBP ou GIF.");
+          continue;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+          setAttachmentError("Image trop lourde. Limite : environ 4,8 Mo.");
+          continue;
+        }
+        const dataUrl = await readAsDataUrl(file);
+        const data = dataUrl.split(",")[1] ?? "";
+        next.push({
+          kind: "image",
+          name: file.name,
+          mimeType: file.type,
+          data,
+          previewUrl: dataUrl,
+        });
+        continue;
+      }
+
+      const mimeType = file.type || inferTextMimeType(file.name);
+      if (!SUPPORTED_TEXT_TYPES.has(mimeType)) {
+        setAttachmentError("Textes acceptés : TXT, MD, CSV ou JSON.");
+        continue;
+      }
+      if (file.size > MAX_TEXT_BYTES) {
+        setAttachmentError("Document texte trop lourd. Limite : environ 240 Ko.");
+        continue;
+      }
+      next.push({
+        kind: "text",
+        name: file.name,
+        mimeType,
+        data: await file.text(),
+      });
+    }
+
+    if (next.length > 0) {
+      setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((current) => current.filter((_, i) => i !== index));
+  }
+
+  function selectClarification(questionId: string, value: string) {
+    setClarificationAnswers((answers) => ({ ...answers, [questionId]: value }));
+  }
+
+  function useOtherClarification(questionId: string) {
+    const value = clarificationOther[questionId]?.trim();
+    if (!value) return;
+    selectClarification(questionId, value);
+  }
+
+  function runWithClarifications() {
+    const enriched = buildClarifiedPrompt(
+      clarificationPrompt,
+      clarificationAnswers,
+    );
+    setQuestion(enriched);
+    setClarificationPrompt("");
+    run(enriched);
+  }
+
+  function skipClarifications() {
+    const prompt = clarificationPrompt;
+    setClarificationPrompt("");
+    run(prompt);
+  }
+
+  function publishDownload(
+    blob: Blob,
+    filename: string,
+    label: string,
+    type: "pdf" | "xlsx",
+  ) {
+    const url = URL.createObjectURL(blob);
+    setExportFile((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return { url, filename, label, type };
+    });
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function exportPdf() {
+    if (!result) return;
+    const answer = [
+      result.final.finalAnswer,
+      result.final.keyPoints.length
+        ? `\nPoints clés\n${result.final.keyPoints
+            .map((point) => `- ${point}`)
+            .join("\n")}`
+        : "",
+    ].join("\n");
+    const blob = await createStyledPdfBlob(result.final.title, askedQuestion, answer);
+    publishDownload(
+      blob,
+      `${safeFilename(result.final.title, "synth-export")}.pdf`,
+      "PDF prêt à télécharger",
+      "pdf",
+    );
+  }
+
+  function exportExcel() {
+    if (!result) return;
+    const blob = xlsxWorkbookBlob(buildWorkbookSheets(result, askedQuestion));
+    publishDownload(
+      blob,
+      `${safeFilename(result.final.title, "synth-export")}.xlsx`,
+      "Excel prêt à télécharger",
+      "xlsx",
+    );
+  }
+
+  function moveModel(modelId: ModelChoiceId, direction: -1 | 1) {
+    setModelOrder((current) => {
+      const index = current.indexOf(modelId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }
+
+  function setModelAt(index: number, modelId: ModelChoiceId) {
+    setModelOrder((current) => {
+      const existingIndex = current.indexOf(modelId);
+      const next = [...current];
+      if (existingIndex >= 0) {
+        [next[index], next[existingIndex]] = [next[existingIndex], next[index]];
+      } else {
+        next[index] = modelId;
+      }
+      return next;
+    });
   }
 
   function stop() {
@@ -290,6 +1437,18 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       }
 
       const providers = (data.prompt.providers ?? []) as ProviderView[];
+      const loadedOrder = providers
+        .map((pv) => {
+          const found = MODEL_CHOICES.find(
+            (model) => model.provider === pv.provider,
+          );
+          return found?.id;
+        })
+        .filter(isModelChoiceId);
+      const missingProviders = DEFAULT_MODEL_ORDER.filter(
+        (p) => !loadedOrder.includes(p),
+      );
+      setActiveModelOrder([...loadedOrder, ...missingProviders]);
       const newSteps = emptySteps();
       for (const pv of providers) {
         newSteps[pv.provider] = {
@@ -324,6 +1483,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     setAskedQuestion("");
     setResult(null);
     setErrorMsg("");
+    setMemoryNotice(null);
   }
 
   async function copyAnswer() {
@@ -387,9 +1547,23 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     );
   }
 
+  function openProjectDialog() {
+    setProjectName("");
+    setProjectError("");
+    setProjectDialogOpen(true);
+  }
+
+  function closeProjectDialog() {
+    setProjectDialogOpen(false);
+    setProjectError("");
+  }
+
   async function createProject() {
-    const name = window.prompt("Nom du projet", "Nouveau projet");
-    if (name === null) return;
+    const name = projectName.trim();
+    if (!name) {
+      setProjectError("Ajoutez un nom de projet.");
+      return;
+    }
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -399,9 +1573,12 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
       if (res.ok) {
         const { project } = await res.json();
         setProjects((ps) => [...ps, project]);
+        closeProjectDialog();
+      } else {
+        setProjectError("Impossible de créer ce projet.");
       }
     } catch {
-      /* ignore */
+      setProjectError("Impossible de créer ce projet.");
     }
   }
 
@@ -438,7 +1615,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
           ? "Erreur"
           : "Prêt";
 
-  const showComposer = phase !== "answer";
+  const showComposer = phase !== "loading";
 
   const pinned = convos.filter((c) => c.pinned && !c.archived);
   const archivedList = convos.filter((c) => c.archived);
@@ -476,7 +1653,11 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
               : "text-muted-fg"
           }`}
         >
-          {c.pinned && <span className="mr-1 text-accent-strong">★</span>}
+          {c.pinned && (
+            <span className="mr-[6px] inline-flex align-[-2px] text-accent-strong">
+              <PinIcon />
+            </span>
+          )}
           {c.title}
         </button>
         <button
@@ -486,7 +1667,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
             menuId === c.id ? "flex" : "hidden group-hover:flex"
           }`}
         >
-          ⋯
+          <MoreIcon />
         </button>
       </div>
     );
@@ -506,7 +1687,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
             Nouvelle question
           </button>
           <button
-            onClick={createProject}
+            onClick={openProjectDialog}
             className="flex h-[34px] w-full items-center gap-[8px] rounded-md border border-border px-[12px] text-[13px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
           >
             <span className="text-[15px] leading-none">+</span> Nouveau projet
@@ -574,22 +1755,48 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border-soft px-4 py-[14px]">
-          <div className="flex min-w-0 items-center gap-[9px]">
-            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent-strong">
-              {initials(userEmail)}
-            </span>
-            <span className="truncate text-[13px] text-muted-fg">
-              {userEmail}
-            </span>
-          </div>
+        <div className="border-t border-border-soft px-4 py-[14px]">
           <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            title="Déconnexion"
-            className="p-1 text-[15px] text-faint transition hover:text-foreground"
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="mb-3 flex w-full items-center justify-between rounded-lg border border-[rgba(43,245,168,.12)] bg-accent/[.045] px-3 py-2 text-left transition hover:border-accent/30 hover:bg-accent/[.08]"
           >
-            ⏻
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="text-[12px] font-semibold text-accent">
+                {CREDIT_USAGE.balance.toLocaleString("fr-FR")}
+              </span>
+              <span className="truncate text-[12px] text-faint">crédits</span>
+            </span>
+            <span className="text-muted-fg">
+              <GaugeIcon />
+            </span>
           </button>
+          <div className="flex items-center justify-between">
+            <div className="flex min-w-0 items-center gap-[9px]">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent-strong">
+                {initials(userEmail)}
+              </span>
+              <span className="truncate text-[13px] text-muted-fg">
+                {userEmail}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSettingsOpen(true)}
+                title="Paramètres et utilisation"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition hover:bg-white/[.05] hover:text-accent"
+              >
+                <GearIcon />
+              </button>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                title="Déconnexion"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition hover:bg-white/[.05] hover:text-foreground"
+              >
+                <PowerIcon />
+              </button>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -633,8 +1840,8 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   <p className="m-0 mb-5 text-[17px] font-medium text-foreground">
                     SYNTH confronte les pistes…
                   </p>
-                  <div className="relative mb-6 h-1 w-[200px] overflow-hidden rounded-full bg-surface-soft">
-                    <span className="animate-synth-bar absolute top-0 h-full w-[40%] rounded-full bg-accent shadow-glow" />
+                  <div className="relative mb-6 h-[3px] w-[260px] overflow-hidden rounded-full bg-[linear-gradient(90deg,transparent,rgba(43,245,168,.1)_16%,rgba(43,245,168,.18)_50%,rgba(43,245,168,.1)_84%,transparent)]">
+                    <span className="animate-synth-bar absolute left-0 top-0 h-full w-[46%] rounded-full bg-[linear-gradient(90deg,transparent_0%,rgba(43,245,168,.35)_18%,#2bf5a8_50%,rgba(43,245,168,.35)_82%,transparent_100%)] shadow-[0_0_12px_rgba(43,245,168,.95),0_0_28px_rgba(43,245,168,.45)]" />
                   </div>
                   <button
                     onClick={stop}
@@ -691,6 +1898,22 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                     </span>
                   </div>
 
+                  {memoryNotice?.shouldSuggestNewConversation ? (
+                    <div className="mb-5 rounded-xl border border-[rgba(43,245,168,.22)] bg-accent/[.06] px-4 py-3">
+                      <p className="m-0 text-[14px] leading-[1.5] text-[#C8F7E4]">
+                        Cette conversation commence à être longue. SYNTH garde
+                        le contexte utile, mais un nouveau fil donnera de
+                        meilleures réponses pour un autre sujet.
+                      </p>
+                      <button
+                        onClick={() => newQuestion(true)}
+                        className="mt-3 h-9 rounded-md border border-accent/30 px-3 text-[13px] font-semibold text-accent transition hover:bg-accent/[.1]"
+                      >
+                        Ouvrir une nouvelle conversation
+                      </button>
+                    </div>
+                  ) : null}
+
                   <h1 className="m-0 mb-4 text-[23px] font-semibold leading-[1.25] tracking-[-0.02em] text-foreground">
                     {result.final.title}
                   </h1>
@@ -734,11 +1957,32 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
 
                   <div className="flex gap-[9px]">
                     <button
-                      onClick={() => newQuestion(false)}
+                      onClick={() => newQuestion(true)}
                       className="h-[42px] rounded-md border border-border bg-white/[.04] px-[18px] text-[14px] font-semibold text-foreground transition hover:bg-white/[.07]"
                     >
-                      Nouvelle question
+                      Nouveau fil
                     </button>
+                    <button
+                      onClick={exportPdf}
+                      className="h-[42px] rounded-md border border-border bg-white/[.04] px-[16px] text-[14px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
+                    >
+                      Télécharger PDF
+                    </button>
+                    <button
+                      onClick={exportExcel}
+                      className="h-[42px] rounded-md border border-border bg-white/[.04] px-[16px] text-[14px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
+                    >
+                      Télécharger Excel
+                    </button>
+                    {exportFile ? (
+                      <a
+                        href={exportFile.url}
+                        download={exportFile.filename}
+                        className="inline-flex h-[42px] items-center rounded-md border border-accent/30 bg-accent/[.08] px-[16px] text-[14px] font-semibold text-accent transition hover:bg-accent/[.14]"
+                      >
+                        {exportFile.label}
+                      </a>
+                    ) : null}
                     <button
                       onClick={copyAnswer}
                       className="h-[42px] rounded-md px-[18px] text-[14px] font-medium text-muted-fg transition hover:text-foreground"
@@ -746,6 +1990,22 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                       {toast ? "Réponse copiée." : "Copier la réponse"}
                     </button>
                   </div>
+                  {exportFile ? (
+                    <div className="mt-4 rounded-xl border border-accent/20 bg-accent/[.06] px-4 py-3 text-[14px] text-[#C8F7E4]">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span>
+                          Votre {exportFile.type === "pdf" ? "PDF" : "Excel"} est prêt.
+                        </span>
+                        <a
+                          href={exportFile.url}
+                          download={exportFile.filename}
+                          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+                        >
+                          Télécharger
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -757,17 +2017,20 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   LE PROCESSUS
                 </p>
                 <div className="flex flex-col gap-1">
-                  {PROVIDER_ORDER.map((p) => {
+                  {activeModelOrder.map((modelId) => {
+                    const model = getModelChoice(modelId);
+                    const p = model.provider;
                     const step = steps[p];
                     return (
                       <ProcessRow
-                        key={p}
-                        label={PROVIDER_LABEL[p]}
+                        key={modelId}
+                        label={step.model ?? model.shortLabel}
+                        subLabel={PROVIDER_LABEL[p]}
                         status={step.status}
                         latencyMs={step.latencyMs}
                         content={step.content}
                         error={step.error}
-                        showDetail={phase === "answer"}
+                        showDetail={phase === "answer" || phase === "loading"}
                       />
                     );
                   })}
@@ -797,8 +2060,239 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
 
         {showComposer && (
           <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-6 pb-[22px] pt-[14px]">
-            <div className="mx-auto max-w-[720px]">
+            <div className="mx-auto grid w-full max-w-[1060px] grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
+              <div className="min-w-0">
+                {phase === "answer" && activeConversationId ? (
+                  <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                    <span className="text-[12.5px] text-faint">
+                      Continuez cette conversation, ou démarrez un nouveau fil.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => newQuestion(true)}
+                      className="text-[12.5px] font-medium text-accent transition hover:text-accent-strong"
+                    >
+                      Nouveau fil
+                    </button>
+                  </div>
+                ) : null}
               <div className="glass rounded-xl p-2 focus-within:border-[rgba(43,245,168,.5)]">
+                {clarificationPrompt ? (
+                  <div className="mb-2 rounded-xl border border-[rgba(43,245,168,.2)] bg-accent/[.055] p-3">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="m-0 mb-1 font-mono text-[11px] tracking-[0.08em] text-accent">
+                          PRÉCISIONS UTILES
+                        </p>
+                        <p className="m-0 text-[14px] leading-[1.4] text-[#C8F7E4]">
+                          SYNTH peut affiner le programme avec ces réponses.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setClarificationPrompt("")}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-faint transition hover:bg-white/[.05] hover:text-foreground"
+                        aria-label="Fermer"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {SPORT_NUTRITION_CLARIFICATIONS.map((item) => (
+                        <div key={item.id}>
+                          <p className="m-0 mb-2 text-[12.5px] font-semibold text-foreground">
+                            {item.label}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {item.options.map((option) => {
+                              const active =
+                                clarificationAnswers[item.id] === option;
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() =>
+                                    selectClarification(item.id, option)
+                                  }
+                                  className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
+                                    active
+                                      ? "border-accent/60 bg-accent text-primary-fg"
+                                      : "border-border bg-surface-soft text-muted-fg hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
+                                  }`}
+                                >
+                                  {option}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-2 flex gap-1.5">
+                            <input
+                              value={clarificationOther[item.id] ?? ""}
+                              onChange={(e) =>
+                                setClarificationOther((values) => ({
+                                  ...values,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  useOtherClarification(item.id);
+                                }
+                              }}
+                              placeholder="Autre..."
+                              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background/60 px-2 text-[12.5px] text-foreground outline-none placeholder:text-faint focus:border-accent/50"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => useOtherClarification(item.id)}
+                              className="h-8 rounded-md border border-border px-2 text-[12px] text-muted-fg transition hover:border-accent/30 hover:text-foreground"
+                            >
+                              OK
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={skipClarifications}
+                        className="h-9 rounded-md border border-border px-3 text-[13px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
+                      >
+                        Ignorer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={runWithClarifications}
+                        className="h-9 rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+                      >
+                        Générer avec ces choix
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[.06] px-2 pb-2 pt-1">
+                  <div className="flex rounded-lg border border-border bg-surface-soft p-1">
+                    {(
+                      [
+                        ["fast", "Rapide"],
+                        ["deep", "Profond"],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setReflectionMode(mode)}
+                        disabled={false}
+                        className={`h-8 rounded-md px-3 text-[12.5px] font-semibold transition ${
+                          reflectionMode === mode
+                            ? "bg-accent text-primary-fg shadow-glow"
+                            : "text-muted-fg hover:bg-white/[.04] hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {reflectionMode === "deep" && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {modelOrder.map((modelId, index) => (
+                        <div
+                          key={modelId}
+                          className="flex h-8 items-center rounded-lg border border-[rgba(43,245,168,.18)] bg-accent/[.06] pl-2 text-[12.5px] font-medium text-[#C8F7E4]"
+                        >
+                          <select
+                            value={modelId}
+                            onChange={(e) => {
+                              if (isModelChoiceId(e.target.value)) {
+                                setModelAt(index, e.target.value);
+                              }
+                            }}
+                            disabled={false}
+                            className="h-7 min-w-[128px] bg-transparent pr-1 text-[12.5px] font-semibold text-[#C8F7E4] outline-none disabled:opacity-60"
+                            aria-label={`Modèle ${index + 1}`}
+                          >
+                            {MODEL_SELECT_OPTIONS.map((model) => (
+                              <option
+                                key={model.id}
+                                value={model.id}
+                                className="bg-surface text-foreground"
+                              >
+                                {model.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => moveModel(modelId, -1)}
+                            disabled={index === 0}
+                            title="Monter"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-faint transition hover:bg-accent/[.12] hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveModel(modelId, 1)}
+                            disabled={
+                              index === modelOrder.length - 1
+                            }
+                            title="Descendre"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-faint transition hover:bg-accent/[.12] hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {attachments.length > 0 || attachmentError ? (
+                  <div className="border-b border-white/[.06] px-2 py-2">
+                    {attachments.length > 0 ? (
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        {attachments.map((attachment, index) => (
+                          <div
+                            key={`${attachment.name}-${index}`}
+                            className="flex max-w-[220px] items-center gap-2 rounded-lg border border-[rgba(43,245,168,.18)] bg-accent/[.06] px-2 py-1.5"
+                          >
+                            {attachment.kind === "image" ? (
+                              <img
+                                src={attachment.previewUrl}
+                                alt=""
+                                className="h-8 w-8 rounded-md object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-soft font-mono text-[10px] text-accent">
+                                TXT
+                              </span>
+                            )}
+                            <span className="truncate text-[12.5px] text-[#C8F7E4]">
+                              {attachment.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(index)}
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-faint transition hover:bg-white/[.05] hover:text-foreground"
+                              aria-label="Retirer le fichier"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {attachmentError ? (
+                      <p className="m-0 text-[12.5px] text-danger-fg">
+                        {attachmentError}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 <textarea
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
@@ -810,18 +2304,33 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   }}
                   placeholder="Posez votre question…"
                   rows={2}
-                  disabled={phase === "loading"}
+                  disabled={false}
                   className="w-full resize-none bg-transparent px-3 pb-1 pt-[10px] text-[16px] leading-[1.5] text-foreground outline-none placeholder:text-faint disabled:opacity-50"
                 />
                 <div className="flex items-center justify-between px-[6px] pb-[2px] pt-1">
-                  <span className="font-mono text-[11px] text-faint">
-                    Entrée pour envoyer
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-[13px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground">
+                      Joindre
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/png,image/jpeg,image/webp,image/gif,text/plain,text/markdown,text/csv,application/json,.txt,.md,.csv,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                          addFiles(e.target.files);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <span className="hidden font-mono text-[11px] text-faint sm:inline">
+                      Entrée pour envoyer
+                    </span>
+                  </div>
                   <button
                     onClick={submit}
-                    disabled={!question.trim() || phase === "loading"}
+                    disabled={!question.trim() && attachments.length === 0}
                     className={`h-9 rounded-md px-4 text-[14px] font-semibold tracking-[-0.01em] transition ${
-                      !question.trim() || phase === "loading"
+                      !question.trim() && attachments.length === 0
                         ? "cursor-not-allowed bg-surface-soft text-faint"
                         : "bg-primary text-primary-fg shadow-glow hover:opacity-90"
                     }`}
@@ -830,6 +2339,8 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   </button>
                 </div>
               </div>
+              </div>
+              <div className="hidden lg:block" />
             </div>
           </div>
         )}
@@ -844,11 +2355,17 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
             style={{ top: menuPos.top, left: menuPos.left }}
             onClick={(e) => e.stopPropagation()}
           >
-            <MenuItem onClick={() => togglePin(menuConv)}>
-              {menuConv.pinned ? "★ Retirer l'épingle" : "★ Épingler"}
+            <MenuItem
+              icon={<PinIcon />}
+              onClick={() => togglePin(menuConv)}
+            >
+              {menuConv.pinned ? "Retirer l'épingle" : "Épingler"}
             </MenuItem>
-            <MenuItem onClick={() => startRename(menuConv)}>
-              ✎ Renommer
+            <MenuItem
+              icon={<EditIcon />}
+              onClick={() => startRename(menuConv)}
+            >
+              Renommer
             </MenuItem>
 
             {(projects.length > 0 || menuConv.projectId) && (
@@ -857,8 +2374,11 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   DÉPLACER VERS
                 </p>
                 {menuConv.projectId && (
-                  <MenuItem onClick={() => moveToProject(menuConv, null)}>
-                    ↩ Sans projet
+                  <MenuItem
+                    icon={<UndoIcon />}
+                    onClick={() => moveToProject(menuConv, null)}
+                  >
+                    Sans projet
                   </MenuItem>
                 )}
                 {projects
@@ -866,24 +2386,212 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                   .map((p) => (
                     <MenuItem
                       key={p.id}
+                      icon={<FolderIcon />}
                       onClick={() => moveToProject(menuConv, p.id)}
                     >
-                      🗂 {p.name}
+                      {p.name}
                     </MenuItem>
                   ))}
               </div>
             )}
 
             <div className="my-1 border-t border-border-soft pt-1">
-              <MenuItem onClick={() => setArchived(menuConv, !menuConv.archived)}>
-                {menuConv.archived ? "⊡ Désarchiver" : "⊟ Archiver"}
+              <MenuItem
+                icon={menuConv.archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
+                onClick={() => setArchived(menuConv, !menuConv.archived)}
+              >
+                {menuConv.archived ? "Désarchiver" : "Archiver"}
               </MenuItem>
-              <MenuItem danger onClick={() => deleteConv(menuConv)}>
-                🗑 Supprimer
+              <MenuItem
+                danger
+                icon={<TrashIcon />}
+                onClick={() => deleteConv(menuConv)}
+              >
+                Supprimer
               </MenuItem>
             </div>
           </div>
         </>
+      )}
+
+      {projectDialogOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+          onClick={closeProjectDialog}
+        >
+          <div
+            className="glass w-full max-w-[460px] rounded-2xl p-5 shadow-[0_24px_80px_-40px_rgba(43,245,168,.65)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="m-0 mb-2 font-mono text-[11px] tracking-[0.08em] text-accent">
+                  NOUVEAU PROJET
+                </p>
+                <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em] text-foreground">
+                  Organiser les conversations
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeProjectDialog}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-faint transition hover:bg-white/[.05] hover:text-foreground"
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            <label className="mb-2 block text-[13px] font-medium text-muted-fg">
+              Nom du projet
+            </label>
+            <input
+              autoFocus
+              value={projectName}
+              onChange={(e) => {
+                setProjectName(e.target.value);
+                if (projectError) setProjectError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createProject();
+                if (e.key === "Escape") closeProjectDialog();
+              }}
+              placeholder="Ex. Sport, Client A, Idées produit"
+              className="h-12 w-full rounded-xl border border-[rgba(43,245,168,.24)] bg-[rgba(6,9,10,.72)] px-4 text-[15px] text-foreground outline-none transition placeholder:text-faint focus:border-accent/60 focus:shadow-[0_0_0_3px_rgba(43,245,168,.12)]"
+            />
+            {projectError ? (
+              <p className="m-0 mt-2 text-[13px] text-danger-fg">
+                {projectError}
+              </p>
+            ) : (
+              <p className="m-0 mt-2 text-[13px] text-faint">
+                Vous pourrez y déplacer vos conversations depuis le menu.
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeProjectDialog}
+                className="h-10 rounded-lg border border-border px-4 text-[14px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={createProject}
+                className="h-10 rounded-lg bg-primary px-5 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+              >
+                Créer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="glass w-full max-w-[620px] rounded-2xl p-5 shadow-[0_24px_90px_-42px_rgba(43,245,168,.7)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="m-0 mb-2 font-mono text-[11px] tracking-[0.08em] text-accent">
+                  PARAMÈTRES
+                </p>
+                <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em] text-foreground">
+                  Utilisation et crédits
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-faint transition hover:bg-white/[.05] hover:text-foreground"
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <UsageMetric
+                label="Solde"
+                value={CREDIT_USAGE.balance.toLocaleString("fr-FR")}
+                suffix="crédits"
+              />
+              <UsageMetric
+                label="Consommés"
+                value={CREDIT_USAGE.spentThisMonth.toLocaleString("fr-FR")}
+                suffix="ce mois"
+              />
+              <UsageMetric
+                label="Autonomie"
+                value={`${CREDIT_USAGE.projectedDays}`}
+                suffix="jours estimés"
+              />
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <UsageGauge
+                label="Crédits mensuels"
+                used={CREDIT_USAGE.spentThisMonth}
+                limit={CREDIT_USAGE.monthlyLimit}
+              />
+              <UsageGauge
+                label="Prompts gratuits"
+                used={CREDIT_USAGE.freePromptsUsed}
+                limit={CREDIT_USAGE.freePromptsLimit}
+              />
+              {CREDIT_USAGE.breakdown.map((item) => (
+                <UsageGauge
+                  key={item.label}
+                  label={item.label}
+                  used={item.used}
+                  limit={item.limit}
+                  compact
+                />
+              ))}
+            </div>
+
+            <div className="mt-6 rounded-xl border border-[rgba(43,245,168,.14)] bg-accent/[.045] px-4 py-3">
+              <div className="flex items-start gap-3">
+                <span className="mt-[2px] text-accent">
+                  <GaugeIcon />
+                </span>
+                <div>
+                  <p className="m-0 text-[14px] font-semibold text-foreground">
+                    Rechargement bientôt disponible
+                  </p>
+                  <p className="m-0 mt-1 text-[13px] leading-[1.45] text-muted-fg">
+                    Ces jauges sont prêtes pour le wallet crédits. Elles seront
+                    reliées aux achats Stripe et à l&apos;historique dès que le
+                    backend crédits sera branché.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="h-10 rounded-lg border border-border px-4 text-[14px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
+              >
+                Fermer
+              </button>
+              <a
+                href="/tarifs"
+                className="inline-flex h-10 items-center rounded-lg bg-primary px-5 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+              >
+                Voir les tarifs
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -908,22 +2616,223 @@ function Section({
 
 function MenuItem({
   children,
+  icon,
   onClick,
   danger = false,
 }: {
   children: React.ReactNode;
+  icon: React.ReactNode;
   onClick: () => void;
   danger?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`block w-full truncate rounded-md px-3 py-[8px] text-left text-[13.5px] transition hover:bg-white/[.05] ${
-        danger ? "text-danger-fg" : "text-foreground"
+      className={`group flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-[9px] text-left text-[13.5px] transition hover:border-[rgba(43,245,168,.34)] hover:bg-[rgba(43,245,168,.14)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,.07),0_12px_34px_-22px_rgba(43,245,168,.95)] ${
+        danger
+          ? "text-danger-fg hover:border-danger-fg/25 hover:bg-danger-fg/[.1]"
+          : "text-foreground hover:text-[#DDFBF0]"
       }`}
     >
-      {children}
+      <span
+        className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+          danger ? "text-danger-fg" : "text-muted-fg group-hover:text-accent"
+        }`}
+      >
+        {icon}
+      </span>
+      <span className="truncate">{children}</span>
     </button>
+  );
+}
+
+function UsageMetric({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  suffix: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[rgba(43,245,168,.14)] bg-surface-soft/70 px-4 py-3">
+      <p className="m-0 mb-1 text-[12px] text-faint">{label}</p>
+      <p className="m-0 text-[22px] font-semibold tracking-[-0.02em] text-foreground">
+        {value}
+      </p>
+      <p className="m-0 text-[12px] text-muted-fg">{suffix}</p>
+    </div>
+  );
+}
+
+function UsageGauge({
+  label,
+  used,
+  limit,
+  compact = false,
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  compact?: boolean;
+}) {
+  const value = percent(used, limit);
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span
+          className={`font-medium text-foreground ${
+            compact ? "text-[13px]" : "text-[14px]"
+          }`}
+        >
+          {label}
+        </span>
+        <span className="font-mono text-[12px] text-muted-fg">
+          {used.toLocaleString("fr-FR")} / {limit.toLocaleString("fr-FR")}
+        </span>
+      </div>
+      <div className="h-[7px] overflow-hidden rounded-full bg-[linear-gradient(90deg,transparent,rgba(43,245,168,.08)_12%,rgba(43,245,168,.12)_50%,rgba(43,245,168,.08)_88%,transparent)]">
+        <div
+          className="h-full rounded-full bg-[linear-gradient(90deg,transparent_0%,rgba(43,245,168,.45)_12%,#2bf5a8_70%,rgba(127,240,194,.75)_88%,transparent_100%)] shadow-[0_0_14px_rgba(43,245,168,.72)]"
+          style={{ width: `${value}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function IconSvg({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className ?? "h-4 w-4"}
+    >
+      {children}
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <IconSvg className="h-[14px] w-[14px]">
+      <path d="M12 3l7 7" />
+      <path d="M14 5l-5 5-4 1 8 8 1-4 5-5" />
+      <path d="M9 15l-5 5" />
+    </IconSvg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <IconSvg>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+    </IconSvg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <IconSvg>
+      <path d="M4 7h16" />
+      <path d="M6 7v12h12V7" />
+      <path d="M9 11h6" />
+      <path d="M4 4h16v3H4z" />
+    </IconSvg>
+  );
+}
+
+function ArchiveRestoreIcon() {
+  return (
+    <IconSvg>
+      <path d="M4 7h16" />
+      <path d="M6 7v12h12V7" />
+      <path d="M12 16V10" />
+      <path d="M9 13l3-3 3 3" />
+      <path d="M4 4h16v3H4z" />
+    </IconSvg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <IconSvg>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </IconSvg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <IconSvg>
+      <path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    </IconSvg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <IconSvg>
+      <path d="M9 14l-4-4 4-4" />
+      <path d="M5 10h10a5 5 0 0 1 0 10h-2" />
+    </IconSvg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <IconSvg className="h-[15px] w-[15px]">
+      <path d="M12 5h.01" />
+      <path d="M12 12h.01" />
+      <path d="M12 19h.01" />
+    </IconSvg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <IconSvg>
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.36a1.7 1.7 0 0 0-1 .58V20a2 2 0 1 1-4 0v-.06a1.7 1.7 0 0 0-1-.58 1.7 1.7 0 0 0-1.87.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-.58-1H4a2 2 0 1 1 0-4h.06a1.7 1.7 0 0 0 .58-1 1.7 1.7 0 0 0-.34-1.87l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-.58V4a2 2 0 1 1 4 0v.06a1.7 1.7 0 0 0 1 .58 1.7 1.7 0 0 0 1.87-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.36 9c.22.35.42.66.58 1H20a2 2 0 1 1 0 4h-.06a1.7 1.7 0 0 0-.54 1Z" />
+    </IconSvg>
+  );
+}
+
+function GaugeIcon() {
+  return (
+    <IconSvg>
+      <path d="M4 14a8 8 0 1 1 16 0" />
+      <path d="M12 14l4-4" />
+      <path d="M8 14h.01" />
+      <path d="M16 14h.01" />
+      <path d="M12 18h.01" />
+    </IconSvg>
+  );
+}
+
+function PowerIcon() {
+  return (
+    <IconSvg>
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+    </IconSvg>
   );
 }
 
@@ -934,7 +2843,7 @@ function StatusDot({
   status: StepStatus;
   idle?: boolean;
 }) {
-  if (idle) {
+  if (idle || status === "idle") {
     return <span className="h-[9px] w-[9px] rounded-full bg-border" />;
   }
   if (status === "running") {
@@ -952,6 +2861,7 @@ function StatusDot({
 
 function ProcessRow({
   label,
+  subLabel,
   status,
   latencyMs,
   content,
@@ -959,6 +2869,7 @@ function ProcessRow({
   showDetail,
 }: {
   label: string;
+  subLabel?: string;
   status: StepStatus;
   latencyMs?: number;
   content?: string;
@@ -972,7 +2883,9 @@ function ProcessRow({
         ? "indisponible"
         : STATUS_TEXT[status];
 
-  const canExpand = showDetail && status === "ok" && Boolean(content);
+  const canPreview = showDetail && status === "ok" && Boolean(content);
+  const preview =
+    content && content.length > 240 ? `${content.slice(0, 240).trim()}…` : content;
 
   return (
     <div className="flex items-start gap-3 py-2">
@@ -981,6 +2894,9 @@ function ProcessRow({
       </span>
       <div className="min-w-0 flex-1">
         <p className="m-0 text-[13.5px] font-medium text-foreground">{label}</p>
+        {subLabel ? (
+          <p className="m-0 text-[11.5px] text-faint">{subLabel}</p>
+        ) : null}
         <p
           className={`m-0 text-[12px] ${
             status === "fail" ? "text-danger-fg" : "text-faint"
@@ -989,15 +2905,23 @@ function ProcessRow({
         >
           {statusText}
         </p>
-        {canExpand && (
-          <details className="mt-2">
-            <summary className="cursor-pointer list-none text-[11.5px] text-accent-strong">
-              voir sa piste
-            </summary>
-            <p className="mt-1 max-h-[180px] overflow-y-auto whitespace-pre-wrap text-[12.5px] leading-[1.5] text-muted-fg">
-              {content}
+        {canPreview && (
+          <div className="mt-2 rounded-lg border border-[rgba(43,245,168,.14)] bg-accent/[.045] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,.035)]">
+            <p className="m-0 max-h-[96px] overflow-hidden whitespace-pre-wrap text-[12.5px] leading-[1.5] text-[#9FB0A8]">
+              {preview}
             </p>
-          </details>
+            {content && content.length > 240 ? (
+              <details className="group mt-1">
+                <summary className="cursor-pointer list-none text-[11.5px] text-accent-strong transition hover:text-accent">
+                  <span className="group-open:hidden">voir plus</span>
+                  <span className="hidden group-open:inline">réduire</span>
+                </summary>
+              <p className="m-0 max-h-[170px] overflow-y-auto whitespace-pre-wrap text-[12.5px] leading-[1.5] text-[#9FB0A8]">
+                {content}
+              </p>
+              </details>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

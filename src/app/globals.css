@@ -75,10 +75,10 @@ body {
 }
 @keyframes synthBar {
   0% {
-    left: -40%;
+    transform: translateX(-125%);
   }
   100% {
-    left: 100%;
+    transform: translateX(225%);
   }
 }
 @keyframes synthGlow {
@@ -98,7 +98,7 @@ body {
   animation: synthPulse 1.2s ease-in-out infinite;
 }
 .animate-synth-bar {
-  animation: synthBar 1.1s ease-in-out infinite;
+  animation: synthBar 1.45s ease-in-out infinite;
 }
 .animate-synth-glow {
   animation: synthGlow 2s ease-in-out infinite;

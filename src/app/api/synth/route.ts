@@ -4,10 +4,78 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { orchestrate } from "@/lib/ai/orchestrator";
 import { judge } from "@/lib/ai/judge";
-import type { ProviderSuccess, SynthResponse } from "@/lib/ai/types";
+import { buildConversationMemoryPrompt } from "@/lib/ai/conversation-memory";
+import {
+  DEFAULT_MODEL_ORDER,
+  isModelChoiceId,
+  type ModelChoiceId,
+} from "@/lib/ai/model-catalog";
+import type {
+  ProviderSuccess,
+  ReflectionMode,
+  SynthResponse,
+  UserAttachment,
+} from "@/lib/ai/types";
 
 // Le pipeline IA peut être long : on autorise jusqu'à 60s.
 export const maxDuration = 60;
+const MAX_ATTACHMENTS = 4;
+const MAX_IMAGE_BASE64_CHARS = 6_500_000;
+const MAX_TEXT_CHARS = 60_000;
+const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const TEXT_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+]);
+
+function normalizeModelOrder(value: unknown): ModelChoiceId[] {
+  const requested = Array.isArray(value)
+    ? Array.from(new Set(value.filter(isModelChoiceId)))
+    : [];
+  const missing = DEFAULT_MODEL_ORDER.filter((p) => !requested.includes(p));
+  return [...requested, ...missing];
+}
+
+function parseReflectionMode(value: unknown): ReflectionMode {
+  return value === "deep" ? "deep" : "fast";
+}
+
+function parseAttachments(value: unknown): UserAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_ATTACHMENTS).flatMap((item): UserAttachment[] => {
+    if (!item || typeof item !== "object") return [];
+    const raw = item as Record<string, unknown>;
+    const name =
+      typeof raw.name === "string" && raw.name.trim()
+        ? raw.name.trim().slice(0, 120)
+        : "fichier";
+    const mimeType = typeof raw.mimeType === "string" ? raw.mimeType : "";
+    const data = typeof raw.data === "string" ? raw.data : "";
+    const kind = raw.kind === "image" || raw.kind === "text" ? raw.kind : null;
+    if (!kind || !data) return [];
+    if (kind === "image") {
+      if (!IMAGE_TYPES.has(mimeType) || data.length > MAX_IMAGE_BASE64_CHARS) {
+        return [];
+      }
+      return [{ kind, name, mimeType, data }];
+    }
+    if (!TEXT_TYPES.has(mimeType) || data.length > MAX_TEXT_CHARS) return [];
+    return [{ kind, name, mimeType, data }];
+  });
+}
+
+function buildStoredPromptContent(prompt: string, attachments: UserAttachment[]): string {
+  if (attachments.length === 0) return prompt;
+  const blocks = attachments.map((a) => {
+    if (a.kind === "image") {
+      return `[Image jointe : ${a.name} (${a.mimeType})]`;
+    }
+    return `[Document texte joint : ${a.name}]\n${a.data.slice(0, MAX_TEXT_CHARS)}`;
+  });
+  return `${prompt}\n\nPièces jointes mémorisées :\n${blocks.join("\n\n")}`;
+}
 
 export async function POST(request: Request) {
   // 1. Authentification.
@@ -18,7 +86,14 @@ export async function POST(request: Request) {
   const userId = session.user.id;
 
   // 2. Lecture et validation du prompt.
-  let body: { prompt?: unknown; conversationId?: unknown };
+  let body: {
+    prompt?: unknown;
+    conversationId?: unknown;
+    reflectionMode?: unknown;
+    modelOrder?: unknown;
+    providerOrder?: unknown;
+    attachments?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -31,6 +106,9 @@ export async function POST(request: Request) {
   }
   const requestedConversationId =
     typeof body.conversationId === "string" ? body.conversationId : null;
+  const reflectionMode = parseReflectionMode(body.reflectionMode);
+  const modelOrder = normalizeModelOrder(body.modelOrder ?? body.providerOrder);
+  const attachments = parseAttachments(body.attachments);
 
   // 3. Conversation : on réutilise celle fournie (si elle appartient à l'utilisateur),
   //    sinon on en crée une nouvelle.
@@ -49,16 +127,28 @@ export async function POST(request: Request) {
     });
   }
 
+  const memory = await prisma.prompt.findMany({
+    where: { conversationId: conversation.id },
+    orderBy: { createdAt: "desc" },
+    include: { finalAnswer: true },
+  });
+  const memoryContext = buildConversationMemoryPrompt(prompt, memory);
+  const executionPrompt = memoryContext.prompt;
+
   // 4. Sauvegarde du prompt.
   const promptRow = await prisma.prompt.create({
     data: {
       conversationId: conversation.id,
-      content: prompt,
+      content: buildStoredPromptContent(prompt, attachments),
     },
   });
 
   // 5 & 6. Appels parallèles avec gestion d'erreur par fournisseur.
-  const providerResults = await orchestrate(prompt);
+  const providerResults = await orchestrate(executionPrompt, {
+    mode: reflectionMode,
+    order: modelOrder,
+    attachments,
+  });
 
   // 7. Persistance de chaque réponse modèle.
   await prisma.modelResponse.createMany({
@@ -107,7 +197,7 @@ export async function POST(request: Request) {
   // 8 & 9. Synthèse par le Juge.
   let final;
   try {
-    final = await judge(prompt, successes);
+    final = await judge(executionPrompt, successes);
   } catch (err) {
     return NextResponse.json(
       {
