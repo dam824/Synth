@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { readStoredContent } from "@/lib/security/crypto";
 import type { ConfidenceLevel } from "@/lib/ai/types";
 
 // Récupère le dernier échange (prompt + réponse finale + pistes) d'une
@@ -60,23 +61,27 @@ export async function GET(
     );
   };
 
+  // Déchiffre la réponse finale d'un prompt (avec repli legacy clair).
+  const finalText = (prompt: (typeof conversation.prompts)[number]): string =>
+    prompt.finalAnswer ? readStoredContent(prompt.finalAnswer) : "";
+
   const p =
     conversation.prompts.find(
-      (prompt) =>
-        prompt.finalAnswer && !isPdfRefusal(prompt.finalAnswer.content),
-    ) ??
-    conversation.prompts[0];
+      (prompt) => prompt.finalAnswer && !isPdfRefusal(finalText(prompt)),
+    ) ?? conversation.prompts[0];
+
+  const pFinalText = p ? finalText(p) : "";
 
   return NextResponse.json({
     id: conversation.id,
     title: conversation.title,
     prompt: p
       ? {
-          content: p.content,
+          content: readStoredContent(p),
           final: p.finalAnswer
             ? {
-                title: fallbackTitle(p.finalAnswer.content),
-                finalAnswer: p.finalAnswer.content,
+                title: fallbackTitle(pFinalText),
+                finalAnswer: pFinalText,
                 keyPoints: [] as string[],
                 confidence: p.finalAnswer.confidence as ConfidenceLevel,
                 disagreements: safeParse(p.finalAnswer.disagreements),
@@ -87,7 +92,7 @@ export async function GET(
             provider: m.provider,
             ok: m.success,
             model: m.model ?? undefined,
-            content: m.content ?? undefined,
+            content: readStoredContent(m) || undefined,
             error: m.error ?? undefined,
             latencyMs: m.latencyMs ?? 0,
           })),

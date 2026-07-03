@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getAdminContext } from "@/lib/admin/access";
 import { SynthClient } from "@/components/synth-client";
 
 function isDatabaseUnavailable(error: unknown): boolean {
@@ -33,9 +34,13 @@ export default async function AppPage() {
       throw error;
     });
 
+  // Affiche le lien admin uniquement aux comptes autorisés.
+  const isAdmin = (await getAdminContext()) !== null;
+
   return (
     <SynthClient
       userEmail={session.user.email ?? ""}
+      isAdmin={isAdmin}
       conversations={conversations.map((c) => ({
         id: c.id,
         title: c.title,

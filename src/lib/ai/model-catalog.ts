@@ -105,9 +105,17 @@ export const MODEL_CHOICES: ModelChoice[] = [
   },
 ];
 
+// Ordre par défaut en mode « Profond » (qualité maximale).
 export const DEFAULT_MODEL_ORDER: ModelChoiceId[] = [
   "claude_opus_48",
   "gpt_55",
+  "gemini_35_flash",
+];
+
+// Ordre imposé en mode « Rapide » : les modèles légers, pour la vitesse.
+export const FAST_MODEL_ORDER: ModelChoiceId[] = [
+  "gpt_54_mini",
+  "claude_haiku_45",
   "gemini_35_flash",
 ];
 

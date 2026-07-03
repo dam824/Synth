@@ -7,8 +7,12 @@ import { callAnthropic } from "@/lib/ai/providers/anthropic-provider";
 import { callGemini } from "@/lib/ai/providers/gemini-provider";
 import { judge } from "@/lib/ai/judge";
 import { buildConversationMemoryPrompt } from "@/lib/ai/conversation-memory";
+import { writeStoredContent } from "@/lib/security/crypto";
+import { rateLimit } from "@/lib/security/rate-limit";
+import { precheckPrompt, postcheckAnswer } from "@/lib/safety/moderation";
 import {
   DEFAULT_MODEL_ORDER,
+  FAST_MODEL_ORDER,
   getModelChoice,
   isModelChoiceId,
   type ModelChoiceId,
@@ -124,12 +128,45 @@ function buildSequentialPrompt(
   ].join("\n");
 }
 
+// Neutralise le contenu d'une piste fournisseur si le post-check le bloque.
+function sanitizeProviderContent(content: string): string {
+  const check = postcheckAnswer(content);
+  if (check.decision === "BLOCK") {
+    return (
+      check.message ??
+      "Cette piste a été retenue pour des raisons de sécurité."
+    );
+  }
+  return content;
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  // Compte suspendu : blocage propre avant tout traitement.
+  const account = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { suspended: true },
+  });
+  if (account?.suspended) {
+    return NextResponse.json(
+      { error: "Votre compte est suspendu. Contactez le support." },
+      { status: 403 },
+    );
+  }
+
+  // Anti-abus : limite le nombre de requêtes par utilisateur.
+  const rl = rateLimit(`synth:${userId}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Trop de requêtes. Réessayez dans un instant." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+    );
+  }
 
   let body: {
     prompt?: unknown;
@@ -152,7 +189,12 @@ export async function POST(request: Request) {
   const requestedConversationId =
     typeof body.conversationId === "string" ? body.conversationId : null;
   const reflectionMode = parseReflectionMode(body.reflectionMode);
-  const modelOrder = normalizeModelOrder(body.modelOrder ?? body.providerOrder);
+  // Mode « Rapide » : on impose les modèles légers (vitesse). Mode « Profond » :
+  // on respecte l'ordre choisi par l'utilisateur (ou le défaut qualité).
+  const modelOrder =
+    reflectionMode === "fast"
+      ? FAST_MODEL_ORDER
+      : normalizeModelOrder(body.modelOrder ?? body.providerOrder);
   const attachments = parseAttachments(body.attachments);
   const orderedModels = modelOrder.map((id) => {
     const choice = getModelChoice(id);
@@ -175,6 +217,25 @@ export async function POST(request: Request) {
   }
   const conversationId = conversation.id;
 
+  // Safety — pré-vérification AVANT tout appel fournisseur et toute persistance.
+  const pre = precheckPrompt(prompt);
+  if (pre.decision !== "ALLOW") {
+    await prisma.safetyLog.create({
+      data: {
+        userId,
+        stage: "pre",
+        decision: pre.decision,
+        category: pre.category,
+      },
+    });
+  }
+  if (pre.decision === "BLOCK") {
+    return NextResponse.json(
+      { error: pre.message ?? "Demande non autorisée.", safety: "blocked" },
+      { status: 422 },
+    );
+  }
+
   const memory = await prisma.prompt.findMany({
     where: { conversationId },
     orderBy: { createdAt: "desc" },
@@ -184,7 +245,10 @@ export async function POST(request: Request) {
   const executionPrompt = memoryContext.prompt;
 
   const promptRow = await prisma.prompt.create({
-    data: { conversationId, content: buildStoredPromptContent(prompt, attachments) },
+    data: {
+      conversationId,
+      ...writeStoredContent(buildStoredPromptContent(prompt, attachments)),
+    },
   });
 
   const encoder = new TextEncoder();
@@ -229,12 +293,16 @@ export async function POST(request: Request) {
             model: entry.model,
           });
           try {
-            const { content, model } = await p.call(
+            const raw = await p.call(
               executionPrompt,
               signal,
               entry.model,
               attachments,
             );
+            // Post-check par fournisseur : la piste individuelle (« voir sa
+            // piste ») ne doit pas exposer de contenu bloqué.
+            const content = sanitizeProviderContent(raw.content);
+            const model = raw.model;
             const latencyMs = Date.now() - startedAt;
             send({
               type: "provider_done",
@@ -294,12 +362,14 @@ export async function POST(request: Request) {
               model: entry.model,
             });
             try {
-              const { content, model } = await p.call(
+              const raw = await p.call(
                 nextPrompt,
                 signal,
                 entry.model,
                 attachments,
               );
+              const content = sanitizeProviderContent(raw.content);
+              const model = raw.model;
               const latencyMs = Date.now() - startedAt;
               send({
                 type: "provider_done",
@@ -347,7 +417,9 @@ export async function POST(request: Request) {
             promptId: promptRow.id,
             provider: r.provider,
             model: r.ok ? r.model : null,
-            content: r.ok ? r.content : null,
+            ...(r.ok
+              ? writeStoredContent(r.content)
+              : { content: null, contentEncrypted: null, contentNonce: null }),
             success: r.ok,
             error: r.ok ? null : r.error,
             latencyMs: r.latencyMs,
@@ -378,10 +450,31 @@ export async function POST(request: Request) {
 
         const final = await judge(executionPrompt, successes);
 
+        // Safety — post-vérification AVANT diffusion / persistance du contenu.
+        const post = postcheckAnswer(final.finalAnswer);
+        if (post.decision !== "ALLOW") {
+          await prisma.safetyLog.create({
+            data: {
+              userId,
+              promptId: promptRow.id,
+              stage: "post",
+              decision: post.decision,
+              category: post.category,
+            },
+          });
+        }
+        if (post.decision === "BLOCK") {
+          final.finalAnswer =
+            post.message ??
+            "La réponse a été retenue pour des raisons de sécurité.";
+          final.keyPoints = [];
+          final.disagreements = [];
+        }
+
         await prisma.finalAnswer.create({
           data: {
             promptId: promptRow.id,
-            content: final.finalAnswer,
+            ...writeStoredContent(final.finalAnswer),
             confidence: final.confidence,
             disagreements: JSON.stringify(final.disagreements),
             usedProviders: JSON.stringify(final.usedProviders),

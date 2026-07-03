@@ -27,6 +27,7 @@ interface ConversationSummary {
 interface SynthClientProps {
   userEmail: string;
   conversations: ConversationSummary[];
+  isAdmin?: boolean;
 }
 
 interface ConvItem {
@@ -970,7 +971,11 @@ function emptySteps(): Record<ProviderName, ProviderStep> {
   };
 }
 
-export function SynthClient({ userEmail, conversations }: SynthClientProps) {
+export function SynthClient({
+  userEmail,
+  conversations,
+  isAdmin = false,
+}: SynthClientProps) {
   const [question, setQuestion] = useState("");
   const [attachments, setAttachments] = useState<ClientAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -1023,6 +1028,7 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
   const [projectName, setProjectName] = useState("");
   const [projectError, setProjectError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
   const [clarificationPrompt, setClarificationPrompt] = useState("");
   const [clarificationAnswers, setClarificationAnswers] = useState<
     Record<string, string>
@@ -1547,6 +1553,27 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
     );
   }
 
+  // Supprime tout l'historique de l'utilisateur (double confirmation).
+  async function deleteAllHistory() {
+    if (
+      !window.confirm(
+        "Supprimer DÉFINITIVEMENT tout votre historique de conversations ? Cette action est irréversible.",
+      )
+    )
+      return;
+    setPrivacyBusy(true);
+    try {
+      const res = await fetch("/api/me/history", { method: "DELETE" });
+      if (res.ok) {
+        setConvos([]);
+        newQuestion(true);
+        setSettingsOpen(false);
+      }
+    } finally {
+      setPrivacyBusy(false);
+    }
+  }
+
   function openProjectDialog() {
     setProjectName("");
     setProjectError("");
@@ -1771,6 +1798,14 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
               <GaugeIcon />
             </span>
           </button>
+          {isAdmin && (
+            <a
+              href="/admin"
+              className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-[13px] font-medium text-muted-fg transition hover:border-[rgba(43,245,168,.4)] hover:text-accent-strong"
+            >
+              <span aria-hidden>🛡</span> Panneau admin
+            </a>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex min-w-0 items-center gap-[9px]">
               <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent-strong">
@@ -2572,6 +2607,33 @@ export function SynthClient({ userEmail, conversations }: SynthClientProps) {
                     backend crédits sera branché.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Confidentialité & données */}
+            <div className="mt-6 border-t border-white/[.06] pt-5">
+              <p className="m-0 mb-2 font-mono text-[11px] tracking-[0.08em] text-accent">
+                CONFIDENTIALITÉ &amp; DONNÉES
+              </p>
+              <p className="m-0 mb-4 text-[13px] leading-[1.5] text-muted-fg">
+                Vos conversations sont chiffrées au repos. L&apos;accès admin est
+                restreint et audité.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href="/api/me/export"
+                  className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-[13.5px] font-medium text-foreground transition hover:bg-white/[.04]"
+                >
+                  Exporter mon historique
+                </a>
+                <button
+                  type="button"
+                  onClick={deleteAllHistory}
+                  disabled={privacyBusy}
+                  className="inline-flex h-10 items-center rounded-lg border border-danger-border px-4 text-[13.5px] font-medium text-danger-fg transition hover:bg-danger-bg disabled:opacity-50"
+                >
+                  {privacyBusy ? "Suppression…" : "Supprimer tout mon historique"}
+                </button>
               </div>
             </div>
 

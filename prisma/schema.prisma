@@ -13,6 +13,32 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
+// Rôles & sécurité
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPPORT
+}
+
+enum AdminAuditAction {
+  VIEW_METADATA
+  BREAK_GLASS_VIEW_CONTENT
+  EXPORT_USER_DATA
+  DELETE_CONVERSATION
+  SUSPEND_USER
+  SAFETY_OVERRIDE
+}
+
+enum SafetyDecision {
+  ALLOW
+  WARN
+  BLOCK
+  ESCALATE
+}
+
+// ---------------------------------------------------------------------------
 // Authentification (Auth.js / NextAuth + adaptateur Prisma)
 // ---------------------------------------------------------------------------
 
@@ -22,6 +48,8 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  role          UserRole  @default(USER)
+  suspended     Boolean   @default(false)
 
   accounts      Account[]
   sessions      Session[]
@@ -29,6 +57,7 @@ model User {
   conversations Conversation[]
   projects      Project[]
   usageLogs     UsageLog[]
+  safetyLogs    SafetyLog[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -114,7 +143,13 @@ model Conversation {
 model Prompt {
   id             String   @id @default(cuid())
   conversationId String
-  content        String   @db.Text
+  // Contenu en clair : conservé pour les anciens enregistrements (lecture).
+  // Les nouveaux prompts laissent ce champ vide et remplissent les colonnes
+  // chiffrées ci-dessous.
+  content        String?  @db.Text
+  contentEncrypted  String? @db.Text
+  contentNonce      String?
+  contentKeyVersion Int     @default(1)
 
   conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   modelResponses ModelResponse[]
@@ -132,9 +167,12 @@ model ModelResponse {
   promptId  String
   provider  String // "openai" | "anthropic" | "gemini"
   model     String? // identifiant exact du modèle utilisé
-  content   String?  @db.Text // null si échec
+  content   String?  @db.Text // legacy clair (anciens enregistrements)
+  contentEncrypted  String? @db.Text
+  contentNonce      String?
+  contentKeyVersion Int     @default(1)
   success   Boolean  @default(false)
-  error     String?  @db.Text // message d'erreur si échec
+  error     String?  @db.Text // message d'erreur (métadonnée, non chiffré)
   latencyMs Int?
 
   prompt    Prompt   @relation(fields: [promptId], references: [id], onDelete: Cascade)
@@ -148,7 +186,10 @@ model ModelResponse {
 model FinalAnswer {
   id            String   @id @default(cuid())
   promptId      String   @unique
-  content       String   @db.Text
+  content       String?  @db.Text // legacy clair (anciens enregistrements)
+  contentEncrypted  String? @db.Text
+  contentNonce      String?
+  contentKeyVersion Int     @default(1)
   confidence    String // "high" | "medium" | "low"
   disagreements String?  @db.Text // JSON sérialisé (liste de désaccords)
   usedProviders String // JSON sérialisé (liste des fournisseurs exploités)
@@ -169,6 +210,46 @@ model UsageLog {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   prompt Prompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([promptId])
+}
+
+// ---------------------------------------------------------------------------
+// Admin & safety (journaux append-only, sans contenu en clair)
+// ---------------------------------------------------------------------------
+
+// Journal d'audit : toute action admin sensible y est tracée.
+model AdminAuditLog {
+  id             String           @id @default(cuid())
+  adminId        String
+  adminEmail     String?
+  targetUserId   String?
+  conversationId String?
+  action         AdminAuditAction
+  reason         String?          @db.Text
+  metadata       String?          @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([conversationId])
+}
+
+// Journal des décisions de modération (pré/post). Ne stocke pas de contenu.
+model SafetyLog {
+  id       String         @id @default(cuid())
+  userId   String
+  promptId String?
+  stage    String // "pre" | "post"
+  decision SafetyDecision
+  category String?
+  metadata String?        @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 

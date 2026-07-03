@@ -1,9 +1,18 @@
+import { readStoredContent } from "@/lib/security/crypto";
+
 const DEFAULT_MEMORY_CHAR_BUDGET = 18000;
 const DEFAULT_MEMORY_TURN_WARNING = 18;
 
-export interface MemoryPrompt {
-  content: string;
-  finalAnswer: { content: string } | null;
+// Forme des colonnes de contenu (clair legacy + chiffré).
+interface StoredContentRow {
+  content: string | null;
+  contentEncrypted: string | null;
+  contentNonce: string | null;
+  contentKeyVersion: number;
+}
+
+export interface MemoryPrompt extends StoredContentRow {
+  finalAnswer: StoredContentRow | null;
 }
 
 export interface ConversationMemory {
@@ -45,10 +54,13 @@ export function buildConversationMemoryPrompt(
 
   for (let i = chronological.length - 1; i >= 0; i -= 1) {
     const item = chronological[i];
-    const answer = item.finalAnswer?.content?.trim();
+    const question = readStoredContent(item).trim();
+    const answer = item.finalAnswer
+      ? readStoredContent(item.finalAnswer).trim()
+      : "";
     const block = [
       `Échange précédent ${i + 1}`,
-      `Utilisateur : ${item.content}`,
+      `Utilisateur : ${question}`,
       answer ? `Réponse SYNTH : ${answer}` : null,
     ]
       .filter(Boolean)
