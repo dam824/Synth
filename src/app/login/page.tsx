@@ -12,7 +12,7 @@ export default function LoginPage() {
         <div className="mb-[30px] text-center">
           <div className="mb-6 inline-flex items-center gap-[9px]">
             <Diamond size={16} />
-            <span className="text-[21px] font-bold tracking-[-0.02em]">SYNTH</span>
+            <span className="text-[21px] font-bold tracking-[-0.02em]">Orsic</span>
           </div>
           <h1 className="m-0 mb-[9px] text-[24px] font-semibold tracking-[-0.02em]">
             Bon retour

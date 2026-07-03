@@ -61,7 +61,7 @@ export function buildConversationMemoryPrompt(
     const block = [
       `Échange précédent ${i + 1}`,
       `Utilisateur : ${question}`,
-      answer ? `Réponse SYNTH : ${answer}` : null,
+      answer ? `Réponse Orsic : ${answer}` : null,
     ]
       .filter(Boolean)
       .join("\n");

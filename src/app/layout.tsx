@@ -9,9 +9,9 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
-  title: "SYNTH — La meilleure réponse, pas juste une IA.",
+  title: "Orsic — La meilleure réponse, pas juste une IA.",
   description:
-    "Une question. La meilleure réponse. SYNTH confronte, affine et synthétise pour vous.",
+    "Une question. La meilleure réponse. Orsic confronte, affine et synthétise pour vous.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

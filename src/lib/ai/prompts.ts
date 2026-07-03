@@ -11,7 +11,7 @@ export const PROVIDER_SYSTEM_PROMPT = `Tu es un assistant expert. Réponds à la
 - Pour sport/nutrition, rappelle brièvement qu'il faut adapter en cas de blessure, pathologie, grossesse, traitement ou avis médical nécessaire.`;
 
 // Instruction système du Juge, qui synthétise les réponses des modèles.
-export const JUDGE_SYSTEM_PROMPT = `Tu es le "Juge" de SYNTH. Plusieurs IA ont répondu à la même question d'un utilisateur.
+export const JUDGE_SYSTEM_PROMPT = `Tu es le "Juge" d'Orsic. Plusieurs IA ont répondu à la même question d'un utilisateur.
 Ta mission : produire UNE seule réponse finale, la meilleure possible.
 
 Méthode :

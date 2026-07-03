@@ -68,7 +68,7 @@ const PACKS = [
 ];
 
 const FEATURES = [
-  ["Réponse multi-modèles Synth", "15 crédits", "OpenAI + Anthropic + Gemini"],
+  ["Réponse multi-modèles Orsic", "15 crédits", "OpenAI + Anthropic + Gemini"],
   ["Prompt texte simple", "5 crédits", "Question légère"],
   ["Analyse document court", "20 crédits", "Petit fichier ou contenu collé"],
   ["Analyse document long", "60 crédits", "Gros contexte"],
@@ -103,7 +103,7 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
 
       <div className="synth-scroll relative z-10 mx-auto max-w-[1120px] px-6">
         <nav className="glass sticky top-4 z-30 mt-5 flex items-center justify-between rounded-2xl py-[11px] pl-[18px] pr-3">
-          <Link href="/" aria-label="Accueil SYNTH">
+          <Link href="/" aria-label="Accueil Orsic">
             <Logo />
           </Link>
           <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
               href={appHref}
               className="glass-accent flex h-[38px] items-center rounded-[10px] px-4 text-[14px] font-semibold tracking-[-0.01em] text-[#7FF0C2] transition hover:brightness-110"
             >
-              Essayer SYNTH
+              Essayer Orsic
             </Link>
           </div>
         </nav>

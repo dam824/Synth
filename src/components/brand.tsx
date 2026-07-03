@@ -17,7 +17,7 @@ export function Logo({ size = 18 }: { size?: number }) {
         className="font-bold tracking-[-0.02em] text-foreground"
         style={{ fontSize: size }}
       >
-        SYNTH
+        Orsic
       </span>
     </span>
   );
