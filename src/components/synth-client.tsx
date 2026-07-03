@@ -343,41 +343,55 @@ function renderMarkdownToHtml(markdown: string): string {
 
 // Document HTML complet, stylé (bandeau vert, tableaux, encadrés), destiné à
 // l'impression → PDF via le moteur Chrome du visiteur.
+// Retire les emojis (qui s'impriment en carrés vides dans le PDF).
+function stripEmoji(text: string): string {
+  return text
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu,
+      "",
+    )
+    .replace(/[ \t]{2,}/g, " ");
+}
+
 function buildStyledPrintDoc(
   title: string,
-  question: string,
+  _question: string,
   answerMarkdown: string,
 ): string {
-  const body = renderMarkdownToHtml(answerMarkdown);
+  const body = renderMarkdownToHtml(stripEmoji(answerMarkdown));
+  const cleanTitle = stripEmoji(title).trim();
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(cleanTitle)}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1b1b1b; margin: 0; }
-  .banner { background: #1b3a2b; color: #fff; padding: 26px 34px; }
-  .banner h1 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -0.01em; }
-  .banner .q { margin: 10px 0 0; color: #cfe6d8; font-size: 12.5px; }
-  .content { padding: 24px 34px 40px; }
-  .content h2 { color: #1f5132; font-size: 18px; margin: 24px 0 10px; }
-  .content p { font-size: 13.5px; line-height: 1.6; margin: 0 0 10px; }
-  .content ul { margin: 0 0 12px; padding-left: 20px; }
-  .content li { font-size: 13.5px; line-height: 1.55; margin-bottom: 4px; }
-  strong { font-weight: 700; }
-  code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.5px; }
-  th { background: #f0f0f0; text-align: left; padding: 9px 11px; border: 1px solid #e0e0e0; font-weight: 700; }
-  td { padding: 9px 11px; border: 1px solid #e6e6e6; vertical-align: top; line-height: 1.45; }
-  .callout { background: #eef7f0; border: 1px solid #cfe6d5; border-left: 3px solid #2e8b57; border-radius: 6px; padding: 12px 14px; margin: 12px 0 16px; font-size: 13px; line-height: 1.5; }
-  .footer { padding: 14px 34px; color: #8a8a8a; font-size: 11px; border-top: 1px solid #eee; }
-  @page { margin: 14mm; }
-  .banner, th, .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; }
+  body { font-family: "Georgia", "Times New Roman", serif; color: #1c2621; }
+  .banner { background: linear-gradient(135deg, #0f2a1e 0%, #1f5132 100%); color: #fff; padding: 34px 40px 30px; }
+  .banner .kicker { margin: 0 0 10px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #7fe0b0; }
+  .banner h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+  .content { padding: 30px 40px 46px; }
+  .content > p:first-child { font-size: 15px; color: #3a4a42; }
+  .content h2 { color: #1f5132; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 700; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #e3ede7; }
+  .content p { font-size: 13.5px; line-height: 1.65; margin: 0 0 11px; }
+  .content ul { margin: 0 0 14px; padding-left: 20px; }
+  .content li { font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; }
+  strong { font-weight: 700; color: #17231d; }
+  code { background: #eef2f0; padding: 1px 5px; border-radius: 4px; font-family: "SFMono-Regular", Menlo, monospace; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 12.5px; box-shadow: 0 1px 0 #e3ede7; }
+  th { background: #1f5132; color: #fff; text-align: left; padding: 11px 13px; font-weight: 600; }
+  td { padding: 10px 13px; border-bottom: 1px solid #e6ece9; vertical-align: top; line-height: 1.5; }
+  tbody tr:nth-child(even) { background: #f6f9f7; }
+  .callout { background: #eef7f0; border-left: 4px solid #2e8b57; border-radius: 0 8px 8px 0; padding: 13px 16px; margin: 14px 0 18px; font-size: 13px; line-height: 1.55; color: #24382d; }
+  .footer { margin: 0 40px; padding: 16px 0; color: #9aa8a1; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5px; letter-spacing: 0.04em; border-top: 1px solid #ecefed; }
+  @page { margin: 13mm; }
+  .banner, th, .callout, tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style></head><body>
   <div class="banner">
-    <h1>${escapeHtml(title)}</h1>
-    ${question ? `<p class="q">Q · ${escapeHtml(question)}</p>` : ""}
+    <p class="kicker">SYNTH · La meilleure réponse</p>
+    <h1>${escapeHtml(cleanTitle)}</h1>
   </div>
   <div class="content">${body}</div>
-  <div class="footer">SYNTH</div>
+  <div class="footer">Document généré par SYNTH</div>
 </body></html>`;
 }
 
