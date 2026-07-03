@@ -72,9 +72,44 @@ export async function GET(
 
   const pFinalText = p ? finalText(p) : "";
 
+  // Sérialise un prompt en « tour » de conversation (question + réponse).
+  const toTurn = (prompt: (typeof conversation.prompts)[number]) => {
+    const answerText = finalText(prompt);
+    return {
+      promptId: prompt.id,
+      content: readStoredContent(prompt),
+      final: prompt.finalAnswer
+        ? {
+            title: fallbackTitle(answerText),
+            finalAnswer: answerText,
+            keyPoints: [] as string[],
+            confidence: prompt.finalAnswer.confidence as ConfidenceLevel,
+            disagreements: safeParse(prompt.finalAnswer.disagreements),
+            usedProviders: safeParse(prompt.finalAnswer.usedProviders),
+          }
+        : null,
+      providers: prompt.modelResponses.map((m) => ({
+        provider: m.provider,
+        ok: m.success,
+        model: m.model ?? undefined,
+        content: readStoredContent(m) || undefined,
+        error: m.error ?? undefined,
+        latencyMs: m.latencyMs ?? 0,
+      })),
+    };
+  };
+
+  // Tous les tours, du plus ancien au plus récent (fil complet).
+  const turns = [...conversation.prompts]
+    .reverse()
+    .filter((prompt) => prompt.finalAnswer)
+    .map(toTurn);
+
   return NextResponse.json({
     id: conversation.id,
     title: conversation.title,
+    turns,
+    // Conservé pour compatibilité (dernier échange pertinent).
     prompt: p
       ? {
           content: readStoredContent(p),

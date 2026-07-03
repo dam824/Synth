@@ -71,6 +71,13 @@ interface FinalPayload {
   providers: ProviderView[];
 }
 
+// Un échange complet (question + réponse) dans le fil de conversation.
+interface ThreadTurn {
+  question: string;
+  final: JudgeResult;
+  providers?: ProviderView[];
+}
+
 interface ClarificationQuestion {
   id: string;
   label: string;
@@ -986,6 +993,8 @@ export function SynthClient({
   );
   const [judging, setJudging] = useState<StepStatus | null>(null);
   const [result, setResult] = useState<FinalPayload | null>(null);
+  // Échanges précédents affichés au-dessus de la réponse courante (fil complet).
+  const [thread, setThread] = useState<ThreadTurn[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [toast, setToast] = useState(false);
   const [exportFile, setExportFile] = useState<{
@@ -1084,6 +1093,13 @@ export function SynthClient({
   }, [exportFile]);
 
   async function run(prompt: string) {
+    // Empile la réponse courante dans le fil avant d'en lancer une nouvelle.
+    if (result) {
+      setThread((t) => [
+        ...t,
+        { question: askedQuestion, final: result.final, providers: result.providers },
+      ]);
+    }
     setAskedQuestion(prompt);
     setPhase("loading");
     setSteps(emptySteps());
@@ -1435,14 +1451,29 @@ export function SynthClient({
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
 
-      if (!data.prompt) {
+      const turns = Array.isArray(data.turns) ? data.turns : [];
+
+      // Fil complet : tous les tours sauf le dernier s'affichent en historique.
+      setThread(
+        turns.slice(0, -1).map((t: ThreadTurn & { content: string }) => ({
+          question: t.content,
+          final: t.final,
+          providers: t.providers,
+        })),
+      );
+
+      // Dernier tour = réponse « courante » (avec repli legacy sur data.prompt).
+      const current = turns.length ? turns[turns.length - 1] : data.prompt;
+
+      if (!current || !current.final) {
+        setThread([]);
         setPhase("empty");
         setResult(null);
         setAskedQuestion("");
         return;
       }
 
-      const providers = (data.prompt.providers ?? []) as ProviderView[];
+      const providers = (current.providers ?? []) as ProviderView[];
       const loadedOrder = providers
         .map((pv) => {
           const found = MODEL_CHOICES.find(
@@ -1466,15 +1497,10 @@ export function SynthClient({
       }
       setSteps(newSteps);
 
-      if (data.prompt.final) {
-        setAskedQuestion(data.prompt.content);
-        setResult({ conversationId: id, final: data.prompt.final, providers });
-        setJudging("ok");
-        setPhase("answer");
-      } else {
-        setPhase("empty");
-        setResult(null);
-      }
+      setAskedQuestion(current.content);
+      setResult({ conversationId: id, final: current.final, providers });
+      setJudging("ok");
+      setPhase("answer");
     } catch {
       setErrorMsg("Impossible de charger la conversation.");
       setPhase("error");
@@ -1488,6 +1514,7 @@ export function SynthClient({
     setQuestion("");
     setAskedQuestion("");
     setResult(null);
+    setThread([]);
     setErrorMsg("");
     setMemoryNotice(null);
   }
@@ -1861,6 +1888,41 @@ export function SynthClient({
           <div className="mx-auto grid w-full max-w-[1060px] flex-1 grid-cols-1 gap-8 px-6 pb-10 pt-6 lg:grid-cols-[1fr_300px]">
             {/* Colonne principale */}
             <div className="min-w-0">
+              {/* Fil : échanges précédents de la conversation */}
+              {thread.length > 0 && (
+                <div className="mb-8 space-y-8 border-b border-white/[.06] pb-8">
+                  {thread.map((turn, ti) => (
+                    <div key={ti} className="animate-synth-rise">
+                      <div className="glass-soft mb-4 flex items-start gap-[11px] rounded-[13px] px-[17px] py-[13px]">
+                        <span className="pt-[2px] font-mono text-[12px] text-faint">
+                          Q
+                        </span>
+                        <span className="text-[15px] leading-[1.5] text-[#C6D2CB]">
+                          {turn.question}
+                        </span>
+                      </div>
+                      <div className="mb-2 flex flex-wrap items-center gap-[9px]">
+                        <span
+                          className={`inline-flex items-center gap-[6px] rounded-full border px-[11px] py-[4px] text-[11.5px] font-semibold ${
+                            CONFIDENCE[turn.final.confidence].className
+                          }`}
+                        >
+                          ● {CONFIDENCE[turn.final.confidence].label}
+                        </span>
+                      </div>
+                      {turn.final.title && (
+                        <h3 className="m-0 mb-2 text-[18px] font-semibold leading-[1.3] tracking-[-0.01em] text-foreground">
+                          {turn.final.title}
+                        </h3>
+                      )}
+                      <div className="whitespace-pre-wrap text-[15px] leading-[1.6] text-[#B8C5BD]">
+                        {turn.final.finalAnswer}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {phase === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center py-[40px] text-center">
                   <div className="mb-[22px] flex items-center gap-[7px]">
