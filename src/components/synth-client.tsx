@@ -1156,6 +1156,10 @@ export function SynthClient({
   const [result, setResult] = useState<FinalPayload | null>(null);
   // Échanges précédents affichés au-dessus de la réponse courante (fil complet).
   const [thread, setThread] = useState<ThreadTurn[]>([]);
+  // Suggestion d'export quand le prompt demandait explicitement un PDF/Excel.
+  const [pendingExport, setPendingExport] = useState<"pdf" | "xlsx" | null>(
+    null,
+  );
   const [errorMsg, setErrorMsg] = useState("");
   const [toast, setToast] = useState(false);
   const [exportFile, setExportFile] = useState<{
@@ -1214,6 +1218,8 @@ export function SynthClient({
     useState<ModelChoiceId[]>(DEFAULT_MODEL_ORDER);
 
   const abortRef = useRef<AbortController | null>(null);
+  // Intention d'export détectée dans le prompt en cours (lue à la fin du run).
+  const pendingExportRef = useRef<"pdf" | "xlsx" | null>(null);
 
   async function refreshSidebar() {
     try {
@@ -1270,6 +1276,9 @@ export function SynthClient({
     setErrorMsg("");
     setMemoryNotice(null);
     setExportFile(null);
+    // Mémorise si l'utilisateur a explicitement demandé un document exportable.
+    pendingExportRef.current = getExportIntent(prompt);
+    setPendingExport(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1396,6 +1405,8 @@ export function SynthClient({
         setQuestion("");
         setAttachments([]);
         setAttachmentError("");
+        // Le prompt demandait un document → propose l'export (bandeau discret).
+        setPendingExport(pendingExportRef.current);
         // Rafraîchit la liste pour faire apparaître la nouvelle conversation.
         refreshSidebar();
         break;
@@ -1700,6 +1711,7 @@ export function SynthClient({
     setThread([]);
     setErrorMsg("");
     setMemoryNotice(null);
+    setPendingExport(null);
   }
 
   async function copyAnswer() {
@@ -2233,6 +2245,31 @@ export function SynthClient({
                         ))}
                       </div>
                     </details>
+                  )}
+
+                  {/* Suggestion d'export : le prompt demandait un document. */}
+                  {pendingExport && (
+                    <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[rgba(43,245,168,.28)] bg-accent/[.06] px-4 py-3">
+                      <div className="flex items-center gap-[10px]">
+                        <span className="text-accent">
+                          {pendingExport === "pdf" ? "📄" : "▦"}
+                        </span>
+                        <span className="text-[14px] text-foreground">
+                          Votre {pendingExport === "pdf" ? "PDF" : "fichier Excel"}{" "}
+                          est prêt.
+                        </span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          pendingExport === "pdf"
+                            ? printStyledPdf()
+                            : exportExcel()
+                        }
+                        className="h-9 rounded-md bg-primary px-4 text-[13.5px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+                      >
+                        Ouvrir
+                      </button>
+                    </div>
                   )}
 
                   <div className="flex gap-[9px]">
