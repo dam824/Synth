@@ -234,6 +234,153 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
+// Convertit un Markdown léger (titres, tableaux, listes, citations, gras) en
+// HTML stylé — pour un rendu PDF via impression navigateur.
+// (Réutilise `inlineMarkdown` défini plus bas pour le formatage inline.)
+function renderMarkdownToHtml(markdown: string): string {
+  const lines = markdown.replace(/\r/g, "").split("\n");
+  const out: string[] = [];
+  let i = 0;
+  let listOpen = false;
+  const closeList = () => {
+    if (listOpen) {
+      out.push("</ul>");
+      listOpen = false;
+    }
+  };
+  const parseRow = (l: string) =>
+    l
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Tableau : ligne avec | suivie d'une ligne de séparation |---|---|
+    if (
+      /\|/.test(line) &&
+      i + 1 < lines.length &&
+      /\|/.test(lines[i + 1]) &&
+      /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])
+    ) {
+      closeList();
+      const header = parseRow(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+        rows.push(parseRow(lines[i]));
+        i += 1;
+      }
+      out.push(
+        "<table><thead><tr>" +
+          header.map((h) => `<th>${inlineMarkdown(h)}</th>`).join("") +
+          "</tr></thead><tbody>",
+      );
+      for (const r of rows) {
+        out.push(
+          "<tr>" +
+            r.map((c) => `<td>${inlineMarkdown(c)}</td>`).join("") +
+            "</tr>",
+        );
+      }
+      out.push("</tbody></table>");
+      continue;
+    }
+
+    if (trimmed === "") {
+      closeList();
+      i += 1;
+      continue;
+    }
+
+    let m: RegExpMatchArray | null;
+    if ((m = trimmed.match(/^#{2,3}\s+(.*)/))) {
+      closeList();
+      out.push(`<h2>${inlineMarkdown(m[1])}</h2>`);
+      i += 1;
+      continue;
+    }
+    if ((m = trimmed.match(/^#\s+(.*)/))) {
+      closeList();
+      out.push(`<h2>${inlineMarkdown(m[1])}</h2>`);
+      i += 1;
+      continue;
+    }
+    if ((m = trimmed.match(/^>\s?(.*)/))) {
+      closeList();
+      const buf = [m[1]];
+      i += 1;
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        buf.push(lines[i].replace(/^\s*>\s?/, ""));
+        i += 1;
+      }
+      out.push(
+        `<div class="callout">${buf.map((b) => inlineMarkdown(b)).join("<br>")}</div>`,
+      );
+      continue;
+    }
+    if ((m = trimmed.match(/^[-*]\s+(.*)/))) {
+      if (!listOpen) {
+        out.push("<ul>");
+        listOpen = true;
+      }
+      out.push(`<li>${inlineMarkdown(m[1])}</li>`);
+      i += 1;
+      continue;
+    }
+
+    closeList();
+    out.push(`<p>${inlineMarkdown(trimmed)}</p>`);
+    i += 1;
+  }
+  closeList();
+  return out.join("\n");
+}
+
+// Document HTML complet, stylé (bandeau vert, tableaux, encadrés), destiné à
+// l'impression → PDF via le moteur Chrome du visiteur.
+function buildStyledPrintDoc(
+  title: string,
+  question: string,
+  answerMarkdown: string,
+): string {
+  const body = renderMarkdownToHtml(answerMarkdown);
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1b1b1b; margin: 0; }
+  .banner { background: #1b3a2b; color: #fff; padding: 26px 34px; }
+  .banner h1 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -0.01em; }
+  .banner .q { margin: 10px 0 0; color: #cfe6d8; font-size: 12.5px; }
+  .content { padding: 24px 34px 40px; }
+  .content h2 { color: #1f5132; font-size: 18px; margin: 24px 0 10px; }
+  .content p { font-size: 13.5px; line-height: 1.6; margin: 0 0 10px; }
+  .content ul { margin: 0 0 12px; padding-left: 20px; }
+  .content li { font-size: 13.5px; line-height: 1.55; margin-bottom: 4px; }
+  strong { font-weight: 700; }
+  code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.5px; }
+  th { background: #f0f0f0; text-align: left; padding: 9px 11px; border: 1px solid #e0e0e0; font-weight: 700; }
+  td { padding: 9px 11px; border: 1px solid #e6e6e6; vertical-align: top; line-height: 1.45; }
+  .callout { background: #eef7f0; border: 1px solid #cfe6d5; border-left: 3px solid #2e8b57; border-radius: 6px; padding: 12px 14px; margin: 12px 0 16px; font-size: 13px; line-height: 1.5; }
+  .footer { padding: 14px 34px; color: #8a8a8a; font-size: 11px; border-top: 1px solid #eee; }
+  @page { margin: 14mm; }
+  .banner, th, .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+</style></head><body>
+  <div class="banner">
+    <h1>${escapeHtml(title)}</h1>
+    ${question ? `<p class="q">Q · ${escapeHtml(question)}</p>` : ""}
+  </div>
+  <div class="content">${body}</div>
+  <div class="footer">SYNTH</div>
+</body></html>`;
+}
+
 function extractMarkdownTables(markdown: string): string[][][] {
   const lines = markdown.split("\n");
   const tables: string[][][] = [];
@@ -1381,6 +1528,36 @@ export function SynthClient({
     a.remove();
   }
 
+  // PDF stylé : rendu HTML mis en forme → impression Chrome (« Enregistrer en
+  // PDF »). Fidélité maximale, vectoriel, sans dépendance ni charge serveur.
+  function printStyledPdf() {
+    if (!result) return;
+    const answer = [
+      result.final.finalAnswer,
+      result.final.keyPoints.length
+        ? `\n## Points clés\n${result.final.keyPoints
+            .map((point) => `- ${point}`)
+            .join("\n")}`
+        : "",
+    ].join("\n");
+    const doc = buildStyledPrintDoc(result.final.title, askedQuestion, answer);
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    iframe.srcdoc = doc;
+    iframe.onload = () => {
+      const w = iframe.contentWindow;
+      if (w) {
+        w.focus();
+        w.print();
+      }
+      setTimeout(() => iframe.remove(), 1500);
+    };
+    document.body.appendChild(iframe);
+  }
+
+  // Export PDF « natif » (téléchargement direct, mise en page basique).
   async function exportPdf() {
     if (!result) return;
     const answer = [
@@ -2060,7 +2237,7 @@ export function SynthClient({
                       Nouveau fil
                     </button>
                     <button
-                      onClick={exportPdf}
+                      onClick={printStyledPdf}
                       className="h-[42px] rounded-md border border-border bg-white/[.04] px-[16px] text-[14px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
                     >
                       Télécharger PDF
