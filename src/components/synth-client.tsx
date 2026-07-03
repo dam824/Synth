@@ -1398,17 +1398,9 @@ export function SynthClient({
   function submit() {
     const q = question.trim() || (attachments.length > 0 ? "Analyse les pièces jointes." : "");
     if (!q || phase === "loading") return;
-    const exportIntent = result ? getExportIntent(q) : null;
-    if (exportIntent === "pdf") {
-      setQuestion("");
-      void exportPdf();
-      return;
-    }
-    if (exportIntent === "xlsx") {
-      setQuestion("");
-      exportExcel();
-      return;
-    }
+    // La touche Entrée envoie toujours la question. L'export PDF/Excel se fait
+    // via les boutons dédiés (une demande contenant « PDF » reste une vraie
+    // question, elle n'est pas détournée en téléchargement).
     const needsClarification = shouldClarify(q);
     if (needsClarification && clarificationPrompt !== q) {
       setClarificationPrompt(q);
