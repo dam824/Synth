@@ -1,4 +1,5 @@
 import { readStoredContent } from "@/lib/security/crypto";
+import { SITE_CONFIG } from "@/config/site";
 
 const DEFAULT_MEMORY_CHAR_BUDGET = 18000;
 const DEFAULT_MEMORY_TURN_WARNING = 18;
@@ -61,7 +62,7 @@ export function buildConversationMemoryPrompt(
     const block = [
       `Échange précédent ${i + 1}`,
       `Utilisateur : ${question}`,
-      answer ? `Réponse Orsic : ${answer}` : null,
+      answer ? `Réponse ${SITE_CONFIG.name} : ${answer}` : null,
     ]
       .filter(Boolean)
       .join("\n");
@@ -91,4 +92,3 @@ export function buildConversationMemoryPrompt(
       truncated || memory.length >= warningTurnLimit(),
   };
 }
-

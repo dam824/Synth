@@ -1,3 +1,5 @@
+import { SITE_CONFIG } from "@/config/site";
+
 // Losange émeraude = signal d'intelligence de la marque.
 export function Diamond({ size = 14 }: { size?: number }) {
   return (
@@ -17,7 +19,7 @@ export function Logo({ size = 18 }: { size?: number }) {
         className="font-bold tracking-[-0.02em] text-foreground"
         style={{ fontSize: size }}
       >
-        Orsic
+        {SITE_CONFIG.name}
       </span>
     </span>
   );

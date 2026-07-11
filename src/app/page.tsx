@@ -3,23 +3,24 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { Diamond, Logo } from "@/components/brand";
 import { NeonBorder } from "@/components/neon-border";
+import { SITE_CONFIG } from "@/config/site";
 
 // Étapes de fonctionnement (titres impactants).
 const STEPS = [
   {
     n: "1",
-    title: "Écrivez une fois",
-    body: "Une seule question, dans vos mots. Aucun réglage, aucun modèle à choisir.",
+    title: "Posez votre question",
+    body: "Décrivez votre situation naturellement. Aucun modèle à choisir, aucun réglage technique.",
   },
   {
     n: "2",
-    title: "Orsic fait travailler plusieurs IA",
-    body: "Les meilleurs modèles analysent votre demande en parallèle, chacun avec ses forces.",
+    title: `${SITE_CONFIG.name} confronte plusieurs IA`,
+    body: "Plusieurs modèles analysent votre demande. Leurs convergences et divergences sont comparées.",
   },
   {
     n: "3",
-    title: "Recevez la meilleure réponse",
-    body: "Une synthèse claire, arbitrée, notée en confiance. Rien à comparer vous-même.",
+    title: "Recevez une réponse consolidée",
+    body: "Une synthèse unique, ses points clés, les désaccords utiles et un indicateur de convergence.",
   },
 ];
 
@@ -45,19 +46,19 @@ const FEATURES = [
   },
   {
     title: "Comparaison automatique",
-    body: "Orsic confronte les réponses, repère les convergences et filtre le bruit.",
+    body: `${SITE_CONFIG.name} confronte les réponses, repère les convergences et filtre le bruit.`,
   },
   {
     title: "Désaccords visibles",
-    body: "Quand les modèles divergent, Orsic le montre au lieu de masquer l'incertitude.",
+    body: `Quand les modèles divergent, ${SITE_CONFIG.name} le montre au lieu de masquer l'incertitude.`,
   },
   {
-    title: "Synthèse notée en confiance",
-    body: "Une réponse unique, accompagnée d'un niveau de confiance : élevé, modéré ou à vérifier.",
+    title: "Indicateur de convergence",
+    body: "Voyez si les analyses convergent fortement, partiellement ou si certains points restent à vérifier.",
   },
   {
-    title: "Historique & sources",
-    body: "Retrouvez vos échanges et, si besoin, ce que chaque piste a réellement proposé.",
+    title: "Historique & pistes consultables",
+    body: "Retrouvez vos échanges et consultez, si nécessaire, les analyses qui ont nourri la synthèse.",
   },
 ];
 
@@ -67,19 +68,18 @@ const COMPARISON: [string, string][] = [
   ["Aucune comparaison", "Comparaison automatique"],
   ["Incertitude cachée", "Désaccords rendus visibles"],
   ["Synthèse à faire soi-même", "Synthèse automatique"],
-  ["Fiabilité floue", "Niveau de confiance affiché"],
+  ["Convergences invisibles", "Indicateur de convergence affiché"],
   ["Plus de temps perdu", "Gain de temps immédiat"],
 ];
 
 // Cas d'usage (profils).
 const USE_CASES = [
-  "Entrepreneur — trancher vite sur une décision sans réunir dix avis.",
-  "Développeur — croiser plusieurs approches et repérer les angles morts.",
-  "Marketeur — un positionnement clair, sans arbitrer entre trois versions.",
-  "Consultant — une réponse solide et sourcée, prête à présenter.",
-  "Étudiant — comprendre un sujet, avec les nuances mises en avant.",
-  "Chercheur — confronter des raisonnements et voir où ils divergent.",
-  "Créateur de contenu — des idées confrontées, pas une seule piste.",
+  "Consultant — confronter une recommandation avant de la transmettre.",
+  "Freelance — repérer les angles morts avant de livrer à un client.",
+  "Dirigeant — faire ressortir les risques et les options avant de décider.",
+  "Entrepreneur — tester une hypothèse commerciale sous plusieurs angles.",
+  "Rédacteur — croiser plusieurs pistes et réduire les réécritures.",
+  "Créateur de contenu — obtenir une première version mieux structurée.",
 ];
 
 export default async function HomePage() {
@@ -111,7 +111,7 @@ export default async function HomePage() {
               href={startHref}
               className="glass-accent flex h-[38px] items-center rounded-[10px] px-4 text-[14px] font-semibold tracking-[-0.01em] text-[#7FF0C2] transition hover:brightness-110"
             >
-              Essayer Orsic
+              Essayer {SITE_CONFIG.name}
             </Link>
           </div>
         </nav>
@@ -122,20 +122,20 @@ export default async function HomePage() {
             <div className="glass-accent mb-[26px] inline-flex items-center gap-2 rounded-full px-[13px] py-[6px]">
               <span className="animate-synth-glow h-[6px] w-[6px] rounded-full bg-accent shadow-glow" />
               <span className="text-[12.5px] font-medium text-[#6FE9B7]">
-                La meilleure réponse, pas juste une IA
+                Une question, plusieurs analyses
               </span>
             </div>
             <h1 className="m-0 mb-[22px] text-[42px] font-bold leading-[1.02] tracking-[-0.04em] sm:text-[60px]">
-              Un seul prompt.
+              Une question importante
               <br />
               <span className="bg-gradient-to-r from-accent via-[#7FF0C2] to-accent bg-clip-text text-transparent drop-shadow-[0_0_38px_rgba(43,245,168,.35)]">
-                Le meilleur de plusieurs IA.
+                mérite plusieurs avis.
               </span>
             </h1>
             <p className="m-0 mb-[34px] max-w-[500px] text-[18.5px] leading-[1.55] text-muted-fg">
-              Orsic interroge les meilleurs modèles en parallèle, compare leurs
-              réponses, détecte les désaccords et vous rend une seule réponse
-              claire — notée en confiance.
+              {SITE_CONFIG.name} confronte plusieurs modèles d&apos;IA, repère leurs
+              désaccords et rassemble leurs analyses dans une réponse consolidée,
+              avec les points à retenir et les incertitudes à connaître.
             </p>
             <div className="flex flex-wrap gap-[11px]">
               <Link
@@ -164,32 +164,30 @@ export default async function HomePage() {
               <span className="h-[9px] w-[9px] rounded-full bg-[#26342D]" />
               <span className="h-[9px] w-[9px] rounded-full bg-[#26342D]" />
               <span className="ml-2 font-mono text-[11px] text-faint">
-                orsic.app/app
+                {SITE_CONFIG.domain}/app
               </span>
             </div>
             <div className="px-[26px] pb-[28px] pt-[26px]">
               <div className="glass-soft mb-[18px] flex items-start gap-3 rounded-[13px] px-[18px] py-4">
                 <span className="pt-[2px] font-mono text-[12px] text-faint">Q</span>
                 <span className="text-[15px] text-[#C6D2CB]">
-                  Quelle structure juridique pour lancer mon activité de freelance
-                  ?
+                  Quels risques anticiper avant d&apos;augmenter mes tarifs de 15 % ?
                 </span>
               </div>
               <div className="mb-[14px] flex items-center gap-[9px]">
                 <span className="glass-accent inline-flex items-center gap-[6px] rounded-full px-[11px] py-[5px] text-[12px] font-semibold text-[#4FE3A8]">
-                  ● Confiance élevée
+                  ● Convergence forte
                 </span>
                 <span className="font-mono text-[11px] text-faint">
                   Synthétisée
                 </span>
               </div>
               <p className="m-0 mb-2 text-[16px] font-semibold tracking-[-0.01em]">
-                La micro-entreprise reste le meilleur point de départ.
+                Une hausse progressive limite le risque de départ.
               </p>
               <p className="m-0 text-[14.5px] leading-[1.6] text-muted-fg">
-                Pour démarrer seul avec peu de charges, le statut de
-                micro-entrepreneur offre la simplicité administrative et une
-                fiscalité allégée.
+                Les analyses convergent sur une hausse par étapes, mais divergent
+                sur la manière de la présenter aux clients existants.
               </p>
             </div>
           </NeonBorder>
@@ -201,7 +199,7 @@ export default async function HomePage() {
             LE PROBLÈME
           </p>
           <h2 className="m-0 mb-[40px] text-center text-[32px] font-bold tracking-[-0.03em]">
-            Comparer les IA soi-même, c&apos;est du temps perdu.
+            Vous n&apos;avez pas besoin d&apos;une réponse de plus. Vous avez besoin de savoir laquelle retenir.
           </h2>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
             <div className="glass-soft rounded-xl p-7">
@@ -222,7 +220,7 @@ export default async function HomePage() {
             <NeonBorder radius={16} className="shadow-accent" innerClassName="p-7">
               <p className="m-0 mb-4 font-mono text-[12px] text-accent">AVEC ORSIC</p>
               <p className="m-0 mb-4 text-[17px] font-semibold">
-                Une réponse. La bonne.
+                Une réponse consolidée.
               </p>
               <div className="flex flex-col gap-[9px]">
                 <div className="h-[11px] w-[95%] rounded-[5px] bg-primary shadow-glow" />
@@ -230,8 +228,8 @@ export default async function HomePage() {
                 <div className="h-[11px] w-[86%] rounded-[5px] bg-[#274038]" />
               </div>
               <p className="mb-0 mt-[18px] text-[14px] leading-[1.5] text-muted-fg">
-                Orsic interroge, compare et arbitre à votre place. Vous lisez,
-                vous décidez.
+                Vous posez une seule question. {SITE_CONFIG.name} transforme les
+                accords, nuances et désaccords en un résultat exploitable.
               </p>
             </NeonBorder>
           </div>
@@ -243,7 +241,7 @@ export default async function HomePage() {
             COMMENT ÇA MARCHE
           </p>
           <h2 className="m-0 mb-[46px] text-center text-[34px] font-bold tracking-[-0.03em]">
-            Une question. Plusieurs raisonnements. Un résultat clair.
+            Plusieurs analyses. Une synthèse claire.
           </h2>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-3">
             {STEPS.map((s) => (
@@ -275,11 +273,12 @@ export default async function HomePage() {
               <h2 className="m-0 mb-4 text-[30px] font-bold leading-[1.1] tracking-[-0.03em]">
                 Moins de copier-coller.
                 <br />
-                Plus de certitude.
+                Plus de recul.
               </h2>
               <p className="m-0 max-w-[440px] text-[16px] leading-[1.6] text-muted-fg">
-                Orsic remplace un travail manuel fastidieux par une seule
-                expérience fluide. Le plus court chemin vers une réponse fiable.
+                {SITE_CONFIG.name} remplace les copier-coller et la comparaison
+                manuelle par une expérience unique, tout en laissant visibles les
+                points qui méritent encore votre attention.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-[10px] sm:grid-cols-2">
@@ -300,16 +299,16 @@ export default async function HomePage() {
         <section className="px-0 pb-[30px] pt-[54px]">
           <div className="glass rounded-2xl p-8 sm:p-10">
             <p className="m-0 mb-3 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
-              LA MEILLEURE RÉPONSE
+              UNE RÉPONSE CONSOLIDÉE
             </p>
             <h2 className="m-0 mb-4 max-w-[640px] text-[28px] font-bold leading-[1.15] tracking-[-0.02em]">
-              La meilleure réponse ne vient pas toujours du même modèle.
+              Un seul modèle ne voit pas toujours tous les angles.
             </h2>
             <p className="m-0 max-w-[680px] text-[16px] leading-[1.6] text-muted-fg">
               Un modèle brille parfois sur la nuance, un autre sur la structure,
-              un troisième apporte un angle inattendu. Orsic ne choisit pas votre
-              camp : il rassemble ces forces et produit une réponse plus robuste,
-              plus complète et plus utile qu&apos;une seule intelligence isolée.
+              un troisième apporte un angle inattendu. {SITE_CONFIG.name}
+              rassemble ces analyses, fait ressortir leurs accords et conserve
+              les divergences utiles au lieu de les masquer.
             </p>
           </div>
         </section>
@@ -318,16 +317,16 @@ export default async function HomePage() {
         <section className="grid grid-cols-1 gap-[18px] px-0 pb-[30px] pt-[54px] sm:grid-cols-3">
           {[
             {
-              t: "Quand les modèles s'accordent",
-              b: "Orsic renforce la confiance : la réponse est solide, vous avancez sereinement.",
+              t: "Ce qui fait consensus",
+              b: "Les éléments sur lesquels les analyses convergent sont réunis clairement.",
             },
             {
-              t: "Quand ils divergent",
-              b: "Orsic vous montre où, au lieu de masquer l'incertitude derrière une réponse unique.",
+              t: "Ce qui mérite votre attention",
+              b: "Les divergences importantes restent visibles au lieu d’être masquées.",
             },
             {
-              t: "Quand une piste est fragile",
-              b: "Orsic le signale, avec un niveau de confiance clair : élevé, modéré ou à vérifier.",
+              t: "Ce qu'il faut encore vérifier",
+              b: `Lorsqu’un point reste fragile ou dépend d’informations manquantes, ${SITE_CONFIG.name} le signale.`,
             },
           ].map((c) => (
             <div key={c.t} className="glass-soft rounded-xl p-6">
@@ -344,7 +343,7 @@ export default async function HomePage() {
         {/* Fonctionnalités */}
         <section className="px-0 pb-[30px] pt-[54px]">
           <h2 className="m-0 mb-[36px] text-[28px] font-bold tracking-[-0.02em]">
-            Tout ce qu&apos;une seule IA ne fait pas.
+            Le travail de comparaison, sans les trois onglets.
           </h2>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
@@ -369,7 +368,7 @@ export default async function HomePage() {
         {/* Comparaison Orsic vs IA classique */}
         <section className="px-0 pb-[30px] pt-[54px]">
           <h2 className="m-0 mb-[36px] text-center text-[28px] font-bold tracking-[-0.02em]">
-            Orsic, ou une seule IA ?
+            {SITE_CONFIG.name}, ou une seule IA ?
           </h2>
           <div className="grid grid-cols-1 gap-[18px] sm:grid-cols-2">
             <div className="glass-soft rounded-xl p-6">
@@ -406,7 +405,7 @@ export default async function HomePage() {
         {/* Cas d'usage (défilement) */}
         <section className="px-0 pb-[30px] pt-[54px]">
           <h2 className="m-0 mb-[22px] text-[24px] font-bold tracking-[-0.02em]">
-            Pour tous ceux qui doivent décider vite et bien.
+            Pour les questions que vous comptez réellement utiliser.
           </h2>
           <div className="marquee-mask overflow-hidden">
             <div className="animate-synth-marquee flex w-max gap-3">
@@ -430,20 +429,20 @@ export default async function HomePage() {
             innerClassName="px-8 py-[54px] text-center"
           >
             <h2 className="m-0 mb-3 text-[34px] font-bold tracking-[-0.03em] text-foreground">
-              Une seule question.
+              La prochaine fois qu&apos;une réponse compte,
               <br />
               <span className="bg-gradient-to-r from-accent to-[#7FF0C2] bg-clip-text text-transparent drop-shadow-[0_0_22px_rgba(43,245,168,.35)]">
-                Le meilleur de plusieurs IA.
+                demandez plusieurs avis en une fois.
               </span>
             </h2>
             <p className="mx-auto mb-7 max-w-[440px] text-[16px] text-muted-fg">
-              Gratuit pour vos premières questions. Aucune carte requise.
+              Découvrez ce que les modèles confirment, contestent ou laissent de côté.
             </p>
             <Link
               href={startHref}
               className="inline-flex h-[50px] items-center rounded-xl bg-primary px-7 text-[16px] font-semibold tracking-[-0.01em] text-primary-fg shadow-glow transition hover:opacity-90"
             >
-              Demander à Orsic
+              Tester {SITE_CONFIG.name} gratuitement
             </Link>
           </NeonBorder>
         </section>
@@ -452,7 +451,7 @@ export default async function HomePage() {
         <footer className="flex flex-wrap items-center justify-between gap-[14px] border-t border-white/[.06] py-[30px] pb-12">
           <div className="flex items-center gap-2">
             <Diamond size={11} />
-            <span className="text-[14px] font-semibold">Orsic</span>
+            <span className="text-[14px] font-semibold">{SITE_CONFIG.name}</span>
             <span className="text-[13px] text-faint">
               — La meilleure réponse, pas juste une IA.
             </span>

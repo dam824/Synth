@@ -3,85 +3,70 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { Diamond, Logo } from "@/components/brand";
 import { NeonBorder } from "@/components/neon-border";
+import { SITE_CONFIG } from "@/config/site";
 
-const PACKS = [
+const PLANS = [
   {
-    key: "starter",
-    name: "Starter",
-    price: "5 EUR",
-    credits: "500",
-    bonus: "0",
-    ratio: "100",
-    klarna: "Non",
+    key: "decouverte",
+    name: "Découverte",
+    price: "0 €",
+    cadence: "pour commencer",
+    description: "Découvrez ce que plusieurs modèles apportent à une même question.",
+    credits: "100 crédits offerts",
+    equivalent: "Environ 5 synthèses standard",
+    features: [
+      "Réponse consolidée",
+      "Désaccords importants visibles",
+      "1 projet",
+      "Historique pendant 30 jours",
+      "Crédits non reportables",
+    ],
+    cta: "Essayer gratuitement",
     featured: false,
   },
   {
-    key: "creator",
-    name: "Creator",
-    price: "15 EUR",
-    credits: "1 800",
-    bonus: "300",
-    ratio: "120",
-    klarna: "Non",
-    featured: true,
+    key: "essentiel",
+    name: "Essentiel",
+    price: "14,90 €",
+    cadence: "TTC / mois",
+    description: "Pour vos recherches, analyses et travaux réguliers.",
+    credits: "1 200 crédits / mois",
+    equivalent: "Environ 60 synthèses standard",
+    features: [
+      "Analyses rapides, standard et approfondies",
+      "Jusqu’à 10 projets",
+      "Historique complet",
+      "Export des réponses",
+      "Report plafonné à une mensualité",
+    ],
+    cta: "Choisir Essentiel",
+    featured: false,
   },
   {
     key: "pro",
     name: "Pro",
-    price: "39 EUR",
-    credits: "5 500",
-    bonus: "1 600",
-    ratio: "141",
-    klarna: "Optionnel",
-    featured: false,
-  },
-  {
-    key: "studio",
-    name: "Studio",
-    price: "99 EUR",
-    credits: "16 000",
-    bonus: "6 100",
-    ratio: "162",
-    klarna: "Oui",
-    featured: false,
-  },
-  {
-    key: "agency",
-    name: "Agency",
-    price: "249 EUR",
-    credits: "45 000",
-    bonus: "20 100",
-    ratio: "181",
-    klarna: "Oui",
-    featured: false,
-  },
-  {
-    key: "production",
-    name: "Production",
-    price: "499 EUR",
-    credits: "100 000",
-    bonus: "50 100",
-    ratio: "200",
-    klarna: "Oui",
-    featured: false,
+    price: "29,90 €",
+    cadence: "TTC / mois",
+    description: "Pour les réponses qui engagent votre travail.",
+    credits: "3 000 crédits / mois",
+    equivalent: "Environ 150 synthèses standard",
+    features: [
+      "Tout ce qui est inclus dans Essentiel",
+      "Analyses approfondies",
+      "Projets illimités",
+      "Exports avancés",
+      "Tâches longues estimées avant exécution",
+    ],
+    cta: "Choisir Pro",
+    featured: true,
   },
 ];
 
 const FEATURES = [
-  ["Réponse multi-modèles Orsic", "15 crédits", "OpenAI + Anthropic + Gemini"],
-  ["Prompt texte simple", "5 crédits", "Question légère"],
-  ["Analyse document court", "20 crédits", "Petit fichier ou contenu collé"],
-  ["Analyse document long", "60 crédits", "Gros contexte"],
-  ["Image standard", "30 crédits", "Qualité standard"],
-  ["Image haute qualité", "80 crédits", "Mode premium"],
-  ["Variation image", "25 crédits", "Remix ou variante"],
-  ["Upscale image", "40 crédits", "Prix fixe MVP"],
-  ["Voix courte", "20 crédits", "Génération courte"],
-  ["Voix longue", "80 crédits", "Durée plus élevée"],
-  ["Animation courte", "120 crédits", "Mouvement court"],
-  ["Vidéo courte", "200 crédits", "Génération vidéo courte"],
-  ["Vidéo haute qualité", "500 crédits", "Résolution ou durée supérieure"],
-  ["Workflow ComfyUI", "100 crédits", "Prix de base ajustable"],
+  ["Question rapide", "5 à 10 crédits", "Vérification légère"],
+  [`Synthèse standard ${SITE_CONFIG.name}`, "20 crédits", "Comparaison multi-modèles"],
+  ["Analyse approfondie", "À partir de 60 crédits", "Selon la complexité"],
+  ["Analyse de document", "Estimation préalable", "Selon la longueur du contexte"],
 ];
 
 type TarifsPageProps = {
@@ -94,7 +79,7 @@ type TarifsPageProps = {
 export default async function TarifsPage({ searchParams }: TarifsPageProps) {
   const session = await auth();
   const params = await searchParams;
-  const selectedPack = PACKS.find((pack) => pack.key === params?.pack);
+  const selectedPlan = PLANS.find((plan) => plan.key === params?.pack);
   const appHref = session?.user ? "/app" : "/login";
 
   return (
@@ -103,7 +88,7 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
 
       <div className="synth-scroll relative z-10 mx-auto max-w-[1120px] px-6">
         <nav className="glass sticky top-4 z-30 mt-5 flex items-center justify-between rounded-2xl py-[11px] pl-[18px] pr-3">
-          <Link href="/" aria-label="Accueil Orsic">
+          <Link href="/" aria-label={`Accueil ${SITE_CONFIG.name}`}>
             <Logo />
           </Link>
           <div className="flex items-center gap-2">
@@ -123,7 +108,7 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
               href={appHref}
               className="glass-accent flex h-[38px] items-center rounded-[10px] px-4 text-[14px] font-semibold tracking-[-0.01em] text-[#7FF0C2] transition hover:brightness-110"
             >
-              Essayer Orsic
+              Essayer {SITE_CONFIG.name}
             </Link>
           </div>
         </nav>
@@ -132,23 +117,24 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
           <div className="glass-accent mb-[24px] inline-flex items-center gap-2 rounded-full px-[13px] py-[6px]">
             <span className="h-[6px] w-[6px] rounded-full bg-accent shadow-glow" />
             <span className="text-[12.5px] font-medium text-[#6FE9B7]">
-              Crédits simples, prix visibles
+              Des règles claires, sans quota caché
             </span>
           </div>
           <h1 className="m-0 max-w-[760px] text-[42px] font-bold leading-[1.02] tracking-[-0.04em] sm:text-[64px]">
-            Choisissez vos crédits.
+            Choisissez votre rythme.
             <br />
             <span className="bg-gradient-to-r from-accent via-[#7FF0C2] to-accent bg-clip-text text-transparent drop-shadow-[0_0_38px_rgba(43,245,168,.35)]">
-              Utilisez-les quand vous voulez.
+              Gardez le contrôle de chaque analyse.
             </span>
           </h1>
           <p className="m-0 mt-[24px] max-w-[620px] text-[18px] leading-[1.55] text-muted-fg">
-            Les premières questions sont offertes. Ensuite, chaque action
-            consomme un nombre clair de crédits avant lancement.
+            Chaque formule inclut un budget mensuel de crédits. Avant chaque
+            tâche, vous connaissez son coût maximal. Aucun dépassement sans
+            votre confirmation.
           </p>
           {params?.checkout === "soon" ? (
             <div className="glass-accent mt-7 max-w-[620px] rounded-2xl px-5 py-4 text-[14.5px] leading-[1.5] text-[#B9F8DA]">
-              Le paiement du pack {selectedPack?.name ?? "sélectionné"} sera
+              Le paiement de l&apos;offre {selectedPlan?.name ?? "sélectionnée"} sera
               branché via Stripe. Pour l&apos;instant, aucun débit n&apos;est
               lancé depuis cette page.
             </div>
@@ -156,58 +142,65 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
         </header>
 
         <section className="grid grid-cols-1 gap-[16px] pb-[48px] lg:grid-cols-3">
-          {PACKS.map((pack) => (
+          {PLANS.map((plan) => (
             <NeonBorder
-              key={pack.key}
+              key={plan.key}
               radius={16}
-              className={pack.featured ? "shadow-accent" : ""}
+              className={plan.featured ? "shadow-accent" : ""}
               innerClassName="h-full p-5"
             >
               <div className="flex h-full flex-col">
                 <div className="mb-5 flex items-start justify-between gap-3">
                   <div>
                     <h2 className="m-0 text-[22px] font-bold tracking-[-0.02em]">
-                      {pack.name}
+                      {plan.name}
                     </h2>
                     <p className="m-0 mt-1 text-[13px] text-faint">
-                      {pack.ratio} crédits / EUR
+                      {plan.description}
                     </p>
                   </div>
-                  {pack.featured ? (
+                  {plan.featured ? (
                     <span className="glass-accent rounded-full px-3 py-1 text-[12px] font-semibold text-[#7FF0C2]">
-                      Recommandé
+                      Le plus choisi
                     </span>
                   ) : null}
                 </div>
 
                 <p className="m-0 text-[34px] font-bold tracking-[-0.03em]">
-                  {pack.price}
+                  {plan.price}
                 </p>
-                <p className="m-0 mt-2 text-[16px] font-semibold text-[#7FF0C2]">
-                  {pack.credits} crédits
+                <p className="m-0 mt-1 text-[13px] text-faint">{plan.cadence}</p>
+                <p className="m-0 mt-4 text-[16px] font-semibold text-[#7FF0C2]">
+                  {plan.credits}
                 </p>
+                <p className="m-0 mt-1 text-[13px] text-muted-fg">{plan.equivalent}</p>
 
-                <div className="mt-5 grid gap-2 text-[14px] text-muted-fg">
-                  <div className="flex justify-between gap-4">
-                    <span>Bonus inclus</span>
-                    <span className="text-foreground">{pack.bonus}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span>Klarna</span>
-                    <span className="text-foreground">{pack.klarna}</span>
-                  </div>
-                </div>
+                <ul className="mt-5 flex flex-1 list-none flex-col gap-3 p-0 text-[14px] text-muted-fg">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex gap-2">
+                      <span className="text-accent">✓</span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
 
                 <Link
                   href={
                     session?.user
-                      ? `/tarifs?checkout=soon&pack=${pack.key}`
-                      : `/login?callbackUrl=/tarifs?pack=${pack.key}`
+                      ? plan.key === "decouverte"
+                        ? "/app"
+                        : `/tarifs?checkout=soon&pack=${plan.key}`
+                      : `/login?callbackUrl=/tarifs?pack=${plan.key}`
                   }
                   className="mt-6 inline-flex h-[44px] items-center justify-center rounded-[12px] bg-primary px-4 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
                 >
-                  Acheter ce pack
+                  {plan.cta}
                 </Link>
+                {plan.key !== "decouverte" ? (
+                  <p className="mb-0 mt-3 text-center text-[11.5px] text-faint">
+                    Sans engagement · Résiliable à tout moment
+                  </p>
+                ) : null}
               </div>
             </NeonBorder>
           ))}
@@ -217,15 +210,15 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="m-0 mb-2 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
-                COÛTS PAR ACTION
+                CONSOMMATION INDICATIVE
               </p>
               <h2 className="m-0 text-[30px] font-bold tracking-[-0.03em]">
-                Les tarifs avant de lancer
+                Le coût est annoncé avant de lancer
               </h2>
             </div>
             <div className="flex items-center gap-2 text-[13px] text-muted-fg">
               <Diamond size={9} />
-              Les prix restent ajustables selon les fournisseurs.
+              Aucun dépassement sans confirmation.
             </div>
           </div>
 
@@ -245,6 +238,26 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
                 <span className="text-muted-fg">{note}</span>
               </div>
             ))}
+          </div>
+          <p className="mt-4 text-[12.5px] leading-[1.5] text-faint">
+            Estimations fondées sur une synthèse standard à 20 crédits. La
+            consommation varie selon le mode, les modèles mobilisés et la taille
+            du contexte.
+          </p>
+        </section>
+
+        <section className="pb-[70px]">
+          <div className="glass rounded-2xl p-7 text-center">
+            <p className="m-0 mb-2 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
+              POUR LES ÉQUIPES
+            </p>
+            <h2 className="m-0 text-[25px] font-bold tracking-[-0.02em]">
+              Vous équipez une agence ou un cabinet ?
+            </h2>
+            <p className="mx-auto mb-0 mt-3 max-w-[560px] text-[14.5px] text-muted-fg">
+              L&apos;offre Équipe arrive prochainement. Contactez-nous pour nous
+              parler de vos besoins de collaboration et de facturation.
+            </p>
           </div>
         </section>
       </div>

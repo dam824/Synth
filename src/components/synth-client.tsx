@@ -4,6 +4,7 @@ import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 
 import { Diamond, Logo } from "@/components/brand";
+import { SITE_CONFIG } from "@/config/site";
 import {
   DEFAULT_MODEL_ORDER,
   getModelChoice,
@@ -387,11 +388,11 @@ function buildStyledPrintDoc(
   .banner, th, .callout, tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style></head><body>
   <div class="banner">
-    <p class="kicker">Orsic · La meilleure réponse</p>
+    <p class="kicker">${SITE_CONFIG.name} · La meilleure réponse</p>
     <h1>${escapeHtml(cleanTitle)}</h1>
   </div>
   <div class="content">${body}</div>
-  <div class="footer">Document généré par Orsic</div>
+  <div class="footer">Document généré par ${SITE_CONFIG.name}</div>
 </body></html>`;
 }
 
@@ -547,11 +548,11 @@ function buildPdfHtml(title: string, question: string, answer: string): string {
       .note{background:#eef2f7;border-left:4px solid #111827;padding:12px 14px;margin:16px 0 20px;font-weight:700}
       .footer{margin-top:34px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:12px;color:#64748b}
     </style>
-    <h1>${inlineMarkdown(title || "Document Orsic")}</h1>
-    <div class="meta">Question : ${inlineMarkdown(question || "Conversation Orsic")}</div>
-    <div class="note">Document généré depuis la dernière réponse Orsic.</div>
+    <h1>${inlineMarkdown(title || `Document ${SITE_CONFIG.name}`)}</h1>
+    <div class="meta">Question : ${inlineMarkdown(question || `Conversation ${SITE_CONFIG.name}`)}</div>
+    <div class="note">Document généré depuis la dernière réponse ${SITE_CONFIG.name}.</div>
     ${markdownToHtml(answer)}
-    <div class="footer">Orsic export</div>
+    <div class="footer">${SITE_CONFIG.name} export</div>
   </div>`;
 }
 
@@ -721,10 +722,10 @@ function createNativePdfBlob(title: string, question: string, answer: string): B
   }
 
   fill(0.95, 0.97, 0.98, marginX, 736, contentWidth, 40);
-  text(title || "Document Orsic", marginX, 790, 22, true);
-  paragraph(`Question : ${question || "Conversation Orsic"}`, 10.5, false);
+  text(title || `Document ${SITE_CONFIG.name}`, marginX, 790, 22, true);
+  paragraph(`Question : ${question || `Conversation ${SITE_CONFIG.name}`}`, 10.5, false);
   y -= 2;
-  paragraph("Document généré depuis la dernière réponse Orsic.", 10.5, true);
+  paragraph(`Document généré depuis la dernière réponse ${SITE_CONFIG.name}.`, 10.5, true);
 
   const lines = answer.split("\n");
   for (let index = 0; index < lines.length; index += 1) {
@@ -772,7 +773,7 @@ function createNativePdfBlob(title: string, question: string, answer: string): B
   }
 
   pages.forEach((_, index) => {
-    const footer = `BT /F1 9 Tf 0.39 0.45 0.55 rg ${marginX} 34 Td <${winAnsiHex("Orsic export")}> Tj ET
+    const footer = `BT /F1 9 Tf 0.39 0.45 0.55 rg ${marginX} 34 Td <${winAnsiHex(`${SITE_CONFIG.name} export`)}> Tj ET
 BT /F1 9 Tf 0.39 0.45 0.55 rg 520 34 Td <${winAnsiHex(`Page ${index + 1}`)}> Tj ET`;
     pages[index] += footer;
   });
@@ -2074,7 +2075,7 @@ export function SynthClient({
                 Que voulez-vous savoir ?
               </h1>
               <p className="m-0 max-w-[380px] text-[15.5px] leading-[1.5] text-muted-fg">
-                Posez une question. Orsic confronte les pistes et vous rend la
+                Posez une question. {SITE_CONFIG.name} confronte les pistes et vous rend la
                 meilleure réponse.
               </p>
             </div>
@@ -2130,7 +2131,7 @@ export function SynthClient({
                     ))}
                   </div>
                   <p className="m-0 mb-5 text-[17px] font-medium text-foreground">
-                    Orsic confronte les pistes…
+                    {SITE_CONFIG.name} confronte les pistes…
                   </p>
                   <div className="relative mb-6 h-[3px] w-[260px] overflow-hidden rounded-full bg-[linear-gradient(90deg,transparent,rgba(43,245,168,.1)_16%,rgba(43,245,168,.18)_50%,rgba(43,245,168,.1)_84%,transparent)]">
                     <span className="animate-synth-bar absolute left-0 top-0 h-full w-[46%] rounded-full bg-[linear-gradient(90deg,transparent_0%,rgba(43,245,168,.35)_18%,#2bf5a8_50%,rgba(43,245,168,.35)_82%,transparent_100%)] shadow-[0_0_12px_rgba(43,245,168,.95),0_0_28px_rgba(43,245,168,.45)]" />
@@ -2193,7 +2194,7 @@ export function SynthClient({
                   {memoryNotice?.shouldSuggestNewConversation ? (
                     <div className="mb-5 rounded-xl border border-[rgba(43,245,168,.22)] bg-accent/[.06] px-4 py-3">
                       <p className="m-0 text-[14px] leading-[1.5] text-[#C8F7E4]">
-                        Cette conversation commence à être longue. Orsic garde
+                        Cette conversation commence à être longue. {SITE_CONFIG.name} garde
                         le contexte utile, mais un nouveau fil donnera de
                         meilleures réponses pour un autre sujet.
                       </p>
@@ -2402,7 +2403,7 @@ export function SynthClient({
                           PRÉCISIONS UTILES
                         </p>
                         <p className="m-0 text-[14px] leading-[1.4] text-[#C8F7E4]">
-                          Orsic peut affiner le programme avec ces réponses.
+                          {SITE_CONFIG.name} peut affiner le programme avec ces réponses.
                         </p>
                       </div>
                       <button
@@ -2652,7 +2653,7 @@ export function SynthClient({
                         : "bg-primary text-primary-fg shadow-glow hover:opacity-90"
                     }`}
                   >
-                    Demander à Orsic →
+                    Demander à {SITE_CONFIG.name} →
                   </button>
                 </div>
               </div>
