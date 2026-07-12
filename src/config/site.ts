@@ -1,5 +1,5 @@
 export const SITE_CONFIG = {
-  name: "Orsic",
-  domain: "orsic.app",
+  name: "Themis",
+  domain: "themisapp.fr",
   tagline: "La meilleure réponse, pas juste une IA.",
 } as const;

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 807 1044" width="807" height="1044" style="background:transparent">
+  <defs>
+    <!-- Triangle haut-gauche : halo blanc au sommet -> menthe -->
+    <radialGradient id="triTop" cx="0" cy="16" r="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f2f7f5"/>
+      <stop offset="0.42" stop-color="#b5e1d4"/>
+      <stop offset="0.72" stop-color="#9dd9c9"/>
+      <stop offset="1" stop-color="#9cd8c8"/>
+    </radialGradient>
+
+    <!-- Losange : fond sombre -->
+    <linearGradient id="diaBase" x1="393" y1="329" x2="394" y2="724" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60b49b"/>
+      <stop offset="1" stop-color="#67b8a1"/>
+    </linearGradient>
+    <!-- Losange : facette claire haut-droite -->
+    <linearGradient id="diaFacet" x1="408" y1="355" x2="527" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7ec9b3"/>
+      <stop offset="1" stop-color="#78c2ac"/>
+    </linearGradient>
+    <!-- Losange : table centrale, dégradé diagonal -->
+    <linearGradient id="diaTable" x1="300" y1="565" x2="428" y2="468" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#41e3b6"/>
+      <stop offset="0.55" stop-color="#a5e6cf"/>
+      <stop offset="1" stop-color="#cfeadf"/>
+    </linearGradient>
+
+    <!-- Chevron : moitié haute -->
+    <linearGradient id="arrTop" x1="440" y1="296" x2="804" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#08c58f"/>
+      <stop offset="0.55" stop-color="#03b283"/>
+      <stop offset="0.85" stop-color="#028258"/>
+      <stop offset="1" stop-color="#013c20"/>
+    </linearGradient>
+    <!-- Chevron : moitié basse, plus sombre -->
+    <linearGradient id="arrBot" x1="437" y1="764" x2="804" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04c28e"/>
+      <stop offset="0.45" stop-color="#04966b"/>
+      <stop offset="0.8" stop-color="#026944"/>
+      <stop offset="1" stop-color="#01371e"/>
+    </linearGradient>
+
+    <!-- Pyramide bas-gauche : facette haute (néon -> blanc vers la pointe) -->
+    <linearGradient id="pyrTop" x1="0" y1="543" x2="390" y2="791" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#01b98c"/>
+      <stop offset="0.15" stop-color="#00e7b7"/>
+      <stop offset="0.45" stop-color="#65e7c5"/>
+      <stop offset="0.75" stop-color="#bbe6d9"/>
+      <stop offset="1" stop-color="#eef4f1"/>
+    </linearGradient>
+    <!-- Pyramide : facette gauche (sombre -> clair vers le bas) -->
+    <linearGradient id="pyrLeft" x1="30" y1="543" x2="30" y2="1041" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#02a078"/>
+      <stop offset="0.4" stop-color="#05b58c"/>
+      <stop offset="0.62" stop-color="#57b995"/>
+      <stop offset="1" stop-color="#87c6b2"/>
+    </linearGradient>
+    <!-- Pyramide : facette basse (sombre à l'arête -> blanc coin bas-gauche) -->
+    <linearGradient id="pyrBot" x1="290" y1="795" x2="0" y2="1041" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#37b49a"/>
+      <stop offset="0.5" stop-color="#70c1ab"/>
+      <stop offset="0.8" stop-color="#c0ded4"/>
+      <stop offset="1" stop-color="#e8f1ee"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Triangle haut-gauche -->
+  <path d="M0 16 L390 264 L0 516 Z" fill="url(#triTop)"/>
+
+  <!-- Losange central -->
+  <path d="M393 329 L527 527 L394 724 L88 529 Z" fill="url(#diaBase)"/>
+  <path d="M408 355 L527 527 L425 528 L358 429 Z" fill="url(#diaFacet)"/>
+  <path d="M358 429 L425 528 L358 625 L292 528 Z" fill="url(#diaTable)"/>
+
+  <!-- Chevron droit -->
+  <path d="M440 296 L804 527 L591 527 Z" fill="url(#arrTop)"/>
+  <path d="M591 527 L804 527 L437 764 Z" fill="url(#arrBot)"/>
+
+  <!-- Pyramide bas-gauche -->
+  <path d="M0 543 L390 791 L150 790 Z" fill="url(#pyrTop)"/>
+  <path d="M0 543 L150 790 L0 1041 Z" fill="url(#pyrLeft)"/>
+  <path d="M150 790 L390 791 L0 1041 Z" fill="url(#pyrBot)"/>
+</svg>

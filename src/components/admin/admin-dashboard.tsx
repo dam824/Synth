@@ -10,6 +10,10 @@ interface Overview {
   prompts: number;
   providerErrors: number;
   safetyEvents: number;
+  activeSubscribers: number;
+  creditsAvailable: number;
+  creditsGranted: number;
+  creditsSpentThisMonth: number;
 }
 
 interface ConversationRow {
@@ -69,6 +73,11 @@ interface UserRow {
   role: string;
   suspended: boolean;
   conversationCount: number;
+  plan: string;
+  subscriptionStatus: string | null;
+  creditBalance: number;
+  creditsSpentThisMonth: number;
+  lifetimeSpent: number;
   createdAt: string;
 }
 
@@ -245,6 +254,9 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
     { label: "Prompts", value: overview?.prompts },
     { label: "Erreurs fournisseur", value: overview?.providerErrors },
     { label: "Événements safety", value: overview?.safetyEvents },
+    { label: "Abonnés actifs", value: overview?.activeSubscribers },
+    { label: "Crédits disponibles", value: overview?.creditsAvailable },
+    { label: "Crédits utilisés ce mois", value: overview?.creditsSpentThisMonth },
   ];
 
   return (
@@ -262,7 +274,7 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
         </header>
 
         {/* KPI */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {KPIS.map((k) => (
             <div key={k.label} className="glass rounded-xl p-4">
               <p className="m-0 text-[22px] font-bold tabular-nums text-foreground">
@@ -383,9 +395,12 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
 
         {tab === "users" && (
           <div className="glass overflow-hidden rounded-xl">
-            <div className="grid grid-cols-[1fr_90px_90px_120px] gap-2 border-b border-white/[.06] px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.06em] text-faint">
+            <div className="grid grid-cols-[minmax(180px,1fr)_90px_110px_100px_100px_90px_120px] gap-2 border-b border-white/[.06] px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.06em] text-faint">
               <span>E-mail</span>
               <span>Rôle</span>
+              <span>Offre</span>
+              <span>Solde</span>
+              <span>Utilisé</span>
               <span>Convs</span>
               <span></span>
             </div>
@@ -397,7 +412,7 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
             {users.map((u) => (
               <div
                 key={u.id}
-                className="grid grid-cols-[1fr_90px_90px_120px] items-center gap-2 border-b border-white/[.04] px-4 py-3 text-[13px]"
+                className="grid grid-cols-[minmax(180px,1fr)_90px_110px_100px_100px_90px_120px] items-center gap-2 border-b border-white/[.04] px-4 py-3 text-[13px]"
               >
                 <span className="truncate text-foreground">
                   {u.email ?? u.id}
@@ -408,6 +423,13 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
                   )}
                 </span>
                 <span className="text-muted-fg">{u.role}</span>
+                <span className="capitalize text-muted-fg">{u.plan}</span>
+                <span className="font-mono text-muted-fg">
+                  {u.creditBalance.toLocaleString("fr-FR")}
+                </span>
+                <span className="font-mono text-muted-fg">
+                  {u.creditsSpentThisMonth.toLocaleString("fr-FR")}
+                </span>
                 <span className="text-muted-fg">{u.conversationCount}</span>
                 <button
                   onClick={() => toggleSuspend(u)}

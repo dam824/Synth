@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -40 887 1124" style="background:transparent">
+  <defs>
+    <radialGradient id="triTop" cx="0" cy="16" r="520" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f2f7f5"/><stop offset=".42" stop-color="#b5e1d4"/><stop offset=".72" stop-color="#9dd9c9"/><stop offset="1" stop-color="#9cd8c8"/></radialGradient>
+    <linearGradient id="diaBase" x1="393" y1="329" x2="394" y2="724" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#60b49b"/><stop offset="1" stop-color="#67b8a1"/></linearGradient>
+    <linearGradient id="diaFacet" x1="408" y1="355" x2="527" y2="527" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7ec9b3"/><stop offset="1" stop-color="#78c2ac"/></linearGradient>
+    <linearGradient id="diaTable" x1="300" y1="565" x2="428" y2="468" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#41e3b6"/><stop offset=".55" stop-color="#a5e6cf"/><stop offset="1" stop-color="#cfeadf"/></linearGradient>
+    <linearGradient id="arrTop" x1="440" y1="296" x2="804" y2="527" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#08c58f"/><stop offset=".55" stop-color="#03b283"/><stop offset=".85" stop-color="#028258"/><stop offset="1" stop-color="#013c20"/></linearGradient>
+    <linearGradient id="arrBot" x1="437" y1="764" x2="804" y2="527" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#04c28e"/><stop offset=".45" stop-color="#04966b"/><stop offset=".8" stop-color="#026944"/><stop offset="1" stop-color="#01371e"/></linearGradient>
+    <linearGradient id="pyrTop" x1="0" y1="543" x2="390" y2="791" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#01b98c"/><stop offset=".15" stop-color="#00e7b7"/><stop offset=".45" stop-color="#65e7c5"/><stop offset=".75" stop-color="#bbe6d9"/><stop offset="1" stop-color="#eef4f1"/></linearGradient>
+    <linearGradient id="pyrLeft" x1="30" y1="543" x2="30" y2="1041" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#02a078"/><stop offset=".4" stop-color="#05b58c"/><stop offset=".62" stop-color="#57b995"/><stop offset="1" stop-color="#87c6b2"/></linearGradient>
+    <linearGradient id="pyrBot" x1="290" y1="795" x2="0" y2="1041" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#37b49a"/><stop offset=".5" stop-color="#70c1ab"/><stop offset=".8" stop-color="#c0ded4"/><stop offset="1" stop-color="#e8f1ee"/></linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".4"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="logoClip"><path d="M0 16 390 264 0 516Z"/><path d="M393 329 527 527 394 724 88 529Z"/><path d="m440 296 364 231-367 237 154-237Z"/><path d="m0 543 390 248L0 1041Z"/></clipPath>
+  </defs>
+  <style>
+    .p{transform-box:fill-box;transform-origin:center;animation:pulse 2s cubic-bezier(.45,0,.25,1) infinite}.d1{animation-delay:0s}.d2{animation-delay:.18s}@keyframes pulse{0%,40%,100%{transform:scale(1);opacity:1}12%{transform:scale(.9);opacity:.6}}.push{transform-box:fill-box;transform-origin:center;animation:push 2s cubic-bezier(.45,0,.25,1) infinite .36s}@keyframes push{0%,40%,100%{transform:translateX(0) scale(1);opacity:1}12%{transform:translateX(26px) scale(.9);opacity:.6}}.table{transform-box:fill-box;transform-origin:center;animation:gem 2s ease-in-out infinite .18s}@keyframes gem{0%,45%,100%{transform:scale(1)}15%{transform:scale(1.22)}}@media(prefers-reduced-motion:reduce){.p,.push,.table,.sweep{animation:none}}
+  </style>
+  <g class="p d1"><path d="M0 16 390 264 0 516Z" fill="url(#triTop)"/></g>
+  <g class="p d1"><path d="m0 543 390 248-240-1Z" fill="url(#pyrTop)"/><path d="m0 543 150 247L0 1041Z" fill="url(#pyrLeft)"/><path d="m150 790 240 1L0 1041Z" fill="url(#pyrBot)"/></g>
+  <g class="p d2"><path d="m393 329 134 198-133 197L88 529Z" fill="url(#diaBase)"/><path d="m408 355 119 172-102 1-67-99Z" fill="url(#diaFacet)"/><g class="table"><path d="m358 429 67 99-67 97-66-97Z" fill="url(#diaTable)"/></g></g>
+  <g class="push"><path d="m440 296 364 231H591Z" fill="url(#arrTop)"/><path d="m591 527h213L437 764Z" fill="url(#arrBot)"/></g>
+  <g clip-path="url(#logoClip)" class="sweep" opacity=".9"><rect x="-500" y="-200" width="400" height="1500" fill="url(#shine)" transform="skewX(-18)"><animateTransform attributeName="transform" type="translate" values="-350 0;1550 0" dur="2s" repeatCount="indefinite" additive="sum"/></rect></g>
+</svg>

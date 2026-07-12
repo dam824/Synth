@@ -12,6 +12,16 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 export const metadata: Metadata = {
   title: `${SITE_CONFIG.name} — ${SITE_CONFIG.tagline}`,
   description: `Une question. La meilleure réponse. ${SITE_CONFIG.name} confronte, affine et synthétise pour vous.`,
+  icons: {
+    icon: "/brand/themis-logo.svg",
+    shortcut: "/brand/themis-logo.svg",
+    apple: "/brand/Themis-logo.png",
+  },
+  openGraph: {
+    title: `${SITE_CONFIG.name} — ${SITE_CONFIG.tagline}`,
+    description: `Plusieurs analyses confrontées dans une réponse consolidée par ${SITE_CONFIG.name}.`,
+    images: ["/brand/Themis-logo.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

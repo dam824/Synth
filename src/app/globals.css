@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "DDT Extended";
+  src: url("/fonts/themis/DDT%20W00%20Extended%20SemiBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
 :root {
   --background: #06090a;
   --surface: #0c1210;
@@ -32,6 +40,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.themis-wordmark {
+  font-family: "DDT Extended", var(--font-geist), sans-serif;
+  font-weight: 600;
 }
 
 ::selection {
@@ -233,31 +249,34 @@ body {
   mask: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
 }
 
-/* Bordure néon rotative : un arc conique qui tourne derrière un cœur opaque. */
+/* Bordure émeraude statique, sans liseré lumineux en mouvement. */
 .neon-border {
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  border: 1px solid rgba(43, 245, 168, 0.2);
 }
 .neon-border::before {
-  content: "";
-  position: absolute;
-  inset: -60%;
-  z-index: 0;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 280deg,
-    rgba(43, 245, 168, 0.15) 320deg,
-    #2bf5a8 350deg,
-    #7ff0c2 358deg,
-    transparent 360deg
-  );
-  animation: synthSpin 6s linear infinite;
+  display: none;
 }
 .neon-border > * {
   position: relative;
   z-index: 1;
+}
+
+/* Pré-masquage du hero pour l'animation GSAP (évite tout flash avant
+   hydratation). Uniquement quand le mouvement est autorisé : sinon tout
+   reste visible. Les éléments sont révélés par HomeMotion. */
+@media (prefers-reduced-motion: no-preference) {
+  .home-motion [data-hero-copy] > *,
+  .home-motion [data-hero-panel],
+  .home-motion #hero-q,
+  .home-motion .model-chip,
+  .home-motion #hero-diamond,
+  .home-motion #hero-answer,
+  .home-motion #hero-badge {
+    opacity: 0;
+  }
 }
 
 /* Respecter prefers-reduced-motion */

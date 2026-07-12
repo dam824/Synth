@@ -1,9 +1,9 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { Diamond, Logo } from "@/components/brand";
+import { Logo, ThemisMark } from "@/components/brand";
 import { SITE_CONFIG } from "@/config/site";
 import {
   DEFAULT_MODEL_ORDER,
@@ -29,6 +29,13 @@ interface SynthClientProps {
   userEmail: string;
   conversations: ConversationSummary[];
   isAdmin?: boolean;
+  creditUsage: {
+    planLabel: string;
+    balance: number;
+    monthlyAllowance: number;
+    spentThisPeriod: number;
+    estimatedSyntheses: number;
+  };
 }
 
 interface ConvItem {
@@ -92,20 +99,6 @@ interface ClientAttachment {
   data: string;
   previewUrl?: string;
 }
-
-const CREDIT_USAGE = {
-  balance: 1285,
-  monthlyLimit: 1800,
-  freePromptsUsed: 3,
-  freePromptsLimit: 5,
-  spentThisMonth: 515,
-  projectedDays: 12,
-  breakdown: [
-    { label: "Synth multi-modèles", used: 315, limit: 900 },
-    { label: "Mode profond", used: 120, limit: 450 },
-    { label: "Images / documents", used: 80, limit: 250 },
-  ],
-};
 
 const PROVIDER_ORDER: ProviderName[] = ["openai", "anthropic", "gemini"];
 const PROVIDER_LABEL: Record<ProviderName, string> = {
@@ -1144,6 +1137,7 @@ export function SynthClient({
   userEmail,
   conversations,
   isAdmin = false,
+  creditUsage,
 }: SynthClientProps) {
   const [question, setQuestion] = useState("");
   const [attachments, setAttachments] = useState<ClientAttachment[]>([]);
@@ -1897,17 +1891,13 @@ export function SynthClient({
         <button
           onClick={() => openConversation(c.id)}
           title={c.title}
-          className={`flex-1 truncate rounded-[9px] px-3 py-[10px] text-left text-[13.5px] leading-[1.4] transition hover:bg-white/[.04] ${
+          className={`flex-1 truncate rounded-[9px] border px-3 py-[9px] text-left text-[13.5px] leading-[1.35] transition ${
             activeConversationId === c.id
-              ? "bg-white/[.05] text-foreground"
-              : "text-muted-fg"
+              ? "border-accent/35 bg-accent/[.08] text-foreground shadow-[inset_0_0_20px_rgba(43,245,168,.035)]"
+              : "border-transparent text-muted-fg hover:bg-white/[.035] hover:text-foreground"
           }`}
         >
-          {c.pinned && (
-            <span className="mr-[6px] inline-flex align-[-2px] text-accent-strong">
-              <PinIcon />
-            </span>
-          )}
+          {c.pinned && <span className="mr-2 text-[10px] text-accent">◆</span>}
           {c.title}
         </button>
         <button
@@ -1927,59 +1917,61 @@ export function SynthClient({
     <div className="relative flex h-screen overflow-hidden">
       <div className="synth-orbs" />
       {/* Sidebar */}
-      <aside className="synth-scroll relative z-10 hidden w-[248px] flex-shrink-0 flex-col overflow-y-auto border-r border-border-soft glass-soft lg:flex">
-        <div className="space-y-2 px-4 pb-[10px] pt-4">
+      <aside className="synth-scroll relative z-10 m-2 hidden w-[288px] flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-accent/20 bg-[rgba(4,13,9,.86)] shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_18px_70px_-42px_rgba(43,245,168,.45)] backdrop-blur-xl lg:flex">
+        <div className="space-y-3 px-[14px] pb-4 pt-[14px]">
           <button
             onClick={() => newQuestion(true)}
-            className="flex h-[42px] w-full items-center gap-[9px] rounded-md bg-primary px-[14px] text-[14px] font-semibold tracking-[-0.01em] text-primary-fg shadow-glow transition hover:opacity-90"
+            className="flex h-[44px] w-full items-center justify-center gap-1 rounded-xl bg-primary px-[14px] text-[14px] font-semibold tracking-[-0.01em] text-primary-fg shadow-[0_0_26px_-8px_rgba(43,245,168,.8)] transition hover:-translate-y-px hover:brightness-105"
           >
             <span className="text-[17px] font-normal leading-none">+</span>{" "}
             Nouvelle question
           </button>
           <button
             onClick={openProjectDialog}
-            className="flex h-[34px] w-full items-center gap-[8px] rounded-md border border-border px-[12px] text-[13px] font-medium text-muted-fg transition hover:bg-white/[.04] hover:text-foreground"
+            className="flex h-[40px] w-full items-center gap-[7px] rounded-xl border border-white/[.1] bg-black/10 px-[12px] text-[13px] font-medium text-muted-fg transition hover:border-accent/25 hover:bg-accent/[.035] hover:text-foreground"
           >
             <span className="text-[15px] leading-none">+</span> Nouveau projet
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
+        <div className="flex-1 overflow-y-auto px-[14px] pb-6">
           {/* Épinglées */}
           {pinned.length > 0 && (
             <Section title="ÉPINGLÉES">{pinned.map(renderConv)}</Section>
           )}
 
           {/* Projets */}
-          {projects.map((p) => {
-            const items = convos.filter(
-              (c) => c.projectId === p.id && !c.archived && !c.pinned,
-            );
-            return (
-              <div key={p.id} className="mb-1 mt-3">
-                <div className="group/proj flex items-center justify-between px-3 pb-[4px]">
-                  <span className="flex items-center gap-[6px] font-mono text-[11px] tracking-[0.04em] text-faint">
-                    <span>🗂</span>
-                    <span className="truncate">{p.name}</span>
-                  </span>
-                  <button
-                    onClick={() => deleteProject(p)}
-                    title="Supprimer le projet"
-                    className="hidden text-[12px] text-faint hover:text-danger-fg group-hover/proj:block"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {items.length === 0 ? (
-                  <p className="px-3 py-1 text-[12px] text-faint/70">
-                    Glissez une conversation ici via « ⋯ ».
-                  </p>
-                ) : (
-                  items.map(renderConv)
-                )}
-              </div>
-            );
-          })}
+          {projects.length > 0 && (
+            <Section title="PROJETS">
+              {projects.map((p) => {
+                const items = convos.filter(
+                  (c) => c.projectId === p.id && !c.archived && !c.pinned,
+                );
+                return (
+                  <div key={p.id} className="group/proj mb-1">
+                    <div className="flex h-9 items-center justify-between rounded-lg px-3 text-[13.5px] text-muted-fg transition hover:bg-white/[.035] hover:text-foreground">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-accent/60 bg-accent/[.08]" />
+                        <span className="truncate">{p.name}</span>
+                      </span>
+                      <button
+                        onClick={() => deleteProject(p)}
+                        title="Supprimer le projet"
+                        className="hidden h-7 w-7 items-center justify-center rounded-md text-faint hover:bg-danger-bg hover:text-danger-fg group-hover/proj:flex"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {items.length > 0 && (
+                      <div className="ml-5 border-l border-white/[.06] pl-1">
+                        {items.map(renderConv)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Section>
+          )}
 
           {/* Récentes */}
           <Section title="RÉCENTES">
@@ -2005,33 +1997,36 @@ export function SynthClient({
           )}
         </div>
 
-        <div className="border-t border-border-soft px-4 py-[14px]">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="mb-3 flex w-full items-center justify-between rounded-lg border border-[rgba(43,245,168,.12)] bg-accent/[.045] px-3 py-2 text-left transition hover:border-accent/30 hover:bg-accent/[.08]"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="text-[12px] font-semibold text-accent">
-                {CREDIT_USAGE.balance.toLocaleString("fr-FR")}
+        <div className="mx-[14px] border-t border-white/[.07] py-3">
+          <div className="mb-3 flex h-10 w-full items-center justify-between rounded-xl border border-accent/30 bg-accent/[.045] px-3 transition hover:bg-accent/[.075]">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="flex min-w-0 items-center gap-2 text-left"
+            >
+              <span className="text-[13px] font-semibold tabular-nums text-accent">
+                {creditUsage.balance.toLocaleString("fr-FR")}
               </span>
               <span className="truncate text-[12px] text-faint">crédits</span>
-            </span>
-            <span className="text-muted-fg">
-              <GaugeIcon />
-            </span>
-          </button>
+            </button>
+            <a
+              href="/tarifs"
+              className="text-[12px] font-semibold text-accent transition hover:text-accent-strong"
+            >
+              Recharger
+            </a>
+          </div>
           {isAdmin && (
             <a
               href="/admin"
-              className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-[13px] font-medium text-muted-fg transition hover:border-[rgba(43,245,168,.4)] hover:text-accent-strong"
+              className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-[13px] font-medium text-muted-fg transition hover:border-[rgba(43,245,168,.4)] hover:text-accent-strong"
             >
               <span aria-hidden>🛡</span> Panneau admin
             </a>
           )}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between px-1">
             <div className="flex min-w-0 items-center gap-[9px]">
-              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-semibold text-accent-strong">
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-accent/45 bg-accent/[.12] text-[12px] font-semibold text-accent-strong">
                 {initials(userEmail)}
               </span>
               <span className="truncate text-[13px] text-muted-fg">
@@ -2069,7 +2064,7 @@ export function SynthClient({
           <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col px-6 pb-10 pt-6">
             <div className="animate-synth-rise flex flex-1 flex-col items-center justify-center py-[30px] text-center">
               <div className="glass-accent animate-synth-float mb-5 flex h-[46px] w-[46px] items-center justify-center rounded-[13px] shadow-glow">
-                <Diamond size={16} />
+                <ThemisMark size={30} glow />
               </div>
               <h1 className="m-0 mb-[9px] text-[26px] font-semibold tracking-[-0.02em]">
                 Que voulez-vous savoir ?
@@ -2081,7 +2076,7 @@ export function SynthClient({
             </div>
           </div>
         ) : (
-          <div className="mx-auto grid w-full max-w-[1060px] flex-1 grid-cols-1 gap-8 px-6 pb-10 pt-6 lg:grid-cols-[1fr_300px]">
+          <div className="mx-auto grid w-full max-w-[1100px] flex-1 grid-cols-1 gap-8 px-6 pb-10 pt-6 lg:grid-cols-[1fr_330px]">
             {/* Colonne principale */}
             <div className="min-w-0">
               {/* Fil : échanges précédents de la conversation */}
@@ -2328,57 +2323,19 @@ export function SynthClient({
               )}
             </div>
 
-            {/* Colonne « processus » */}
-            <aside className="lg:sticky lg:top-[84px] lg:self-start">
-              <div className="glass rounded-xl p-4">
-                <p className="mb-4 font-mono text-[11px] tracking-[0.08em] text-faint">
-                  LE PROCESSUS
-                </p>
-                <div className="flex flex-col gap-1">
-                  {activeModelOrder.map((modelId) => {
-                    const model = getModelChoice(modelId);
-                    const p = model.provider;
-                    const step = steps[p];
-                    return (
-                      <ProcessRow
-                        key={modelId}
-                        label={step.model ?? model.shortLabel}
-                        subLabel={PROVIDER_LABEL[p]}
-                        status={step.status}
-                        latencyMs={step.latencyMs}
-                        content={step.content}
-                        error={step.error}
-                        showDetail={phase === "answer" || phase === "loading"}
-                      />
-                    );
-                  })}
-                  <div className="mt-1 flex items-center gap-3 border-t border-border-soft pt-3">
-                    <StatusDot
-                      status={judging === "ok" ? "ok" : "running"}
-                      idle={judging === null}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="m-0 text-[13.5px] font-medium text-foreground">
-                        Synthèse
-                      </p>
-                      <p className="m-0 text-[12px] text-faint">
-                        {judging === "ok"
-                          ? "réponse finale prête"
-                          : judging === "running"
-                            ? "confronte et vérifie…"
-                            : "en attente"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </aside>
+            <DeliberationPanel
+              question={askedQuestion}
+              modelOrder={activeModelOrder}
+              steps={steps}
+              judging={judging}
+              result={result}
+            />
           </div>
         )}
 
         {showComposer && (
           <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-6 pb-[22px] pt-[14px]">
-            <div className="mx-auto grid w-full max-w-[1060px] grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
+            <div className="mx-auto grid w-full max-w-[1100px] grid-cols-1 gap-8 lg:grid-cols-[1fr_330px]">
               <div className="min-w-0">
                 {phase === "answer" && activeConversationId ? (
                   <div className="mb-2 flex items-center justify-between gap-3 px-1">
@@ -2837,42 +2794,32 @@ export function SynthClient({
 
             <div className="grid gap-3 sm:grid-cols-3">
               <UsageMetric
-                label="Solde"
-                value={CREDIT_USAGE.balance.toLocaleString("fr-FR")}
-                suffix="crédits"
+                label="Offre actuelle"
+                value={creditUsage.planLabel}
+                suffix="abonnement"
               />
               <UsageMetric
-                label="Consommés"
-                value={CREDIT_USAGE.spentThisMonth.toLocaleString("fr-FR")}
-                suffix="ce mois"
+                label="Crédits disponibles"
+                value={creditUsage.balance.toLocaleString("fr-FR")}
+                suffix="solde actuel"
               />
               <UsageMetric
-                label="Autonomie"
-                value={`${CREDIT_USAGE.projectedDays}`}
-                suffix="jours estimés"
+                label="Synthèses restantes"
+                value={`≈ ${creditUsage.estimatedSyntheses.toLocaleString("fr-FR")}`}
+                suffix="au tarif standard"
               />
             </div>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-5">
               <UsageGauge
-                label="Crédits mensuels"
-                used={CREDIT_USAGE.spentThisMonth}
-                limit={CREDIT_USAGE.monthlyLimit}
+                label="Utilisation de la période"
+                used={creditUsage.spentThisPeriod}
+                limit={creditUsage.monthlyAllowance}
               />
-              <UsageGauge
-                label="Prompts gratuits"
-                used={CREDIT_USAGE.freePromptsUsed}
-                limit={CREDIT_USAGE.freePromptsLimit}
-              />
-              {CREDIT_USAGE.breakdown.map((item) => (
-                <UsageGauge
-                  key={item.label}
-                  label={item.label}
-                  used={item.used}
-                  limit={item.limit}
-                  compact
-                />
-              ))}
+              <p className="mb-0 mt-2 text-[12.5px] leading-[1.45] text-muted-fg">
+                Une synthèse standard utilise environ 20 crédits. Le coût exact
+                dépend du mode choisi et de la taille du contexte.
+              </p>
             </div>
 
             <div className="mt-6 rounded-xl border border-[rgba(43,245,168,.14)] bg-accent/[.045] px-4 py-3">
@@ -2882,12 +2829,11 @@ export function SynthClient({
                 </span>
                 <div>
                   <p className="m-0 text-[14px] font-semibold text-foreground">
-                    Rechargement bientôt disponible
+                    Solde synchronisé avec Stripe
                   </p>
                   <p className="m-0 mt-1 text-[13px] leading-[1.45] text-muted-fg">
-                    Ces jauges sont prêtes pour le wallet crédits. Elles seront
-                    reliées aux achats Stripe et à l&apos;historique dès que le
-                    backend crédits sera branché.
+                    Les crédits affichés proviennent de votre portefeuille réel.
+                    Chaque renouvellement payé crédite automatiquement votre offre.
                   </p>
                 </div>
               </div>
@@ -3178,6 +3124,226 @@ function PowerIcon() {
       <path d="M12 2v10" />
       <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
     </IconSvg>
+  );
+}
+
+function DeliberationPanel({
+  question,
+  modelOrder,
+  steps,
+  judging,
+  result,
+}: {
+  question: string;
+  modelOrder: ModelChoiceId[];
+  steps: Record<ProviderName, ProviderStep>;
+  judging: StepStatus | null;
+  result: FinalPayload | null;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const visibleModels = modelOrder
+    .map((modelId, index) => {
+      const model = getModelChoice(modelId);
+      return { modelId, model, step: steps[model.provider], index };
+    })
+    .filter(({ step }) => step.status !== "idle");
+  const statusSignature = visibleModels
+    .map(({ modelId, step }) => `${modelId}:${step.status}`)
+    .join("|");
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    if (root.dataset.question !== question) {
+      delete root.dataset.splitAnimated;
+      delete root.dataset.mergeAnimated;
+      root.dataset.question = question;
+    }
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+
+    let ctx: { revert: () => void } | undefined;
+    let cancelled = false;
+    void import("gsap").then(({ gsap }) => {
+      if (cancelled || !rootRef.current) return;
+      ctx = gsap.context(() => {
+        if (!root.dataset.splitAnimated) {
+          const paths = gsap.utils.toArray<SVGPathElement>(".delib-split");
+          paths.forEach((path) => {
+            const length = path.getTotalLength();
+            gsap.set(path, { strokeDasharray: length, strokeDashoffset: length });
+          });
+          gsap.to(paths, {
+            strokeDashoffset: 0,
+            duration: 0.7,
+            stagger: 0.1,
+            ease: "power2.inOut",
+          });
+          root.dataset.splitAnimated = "true";
+        }
+
+        root.querySelectorAll<HTMLElement>(".delib-card:not([data-animated])").forEach((card) => {
+          card.dataset.animated = "true";
+          gsap.from(card, { opacity: 0, y: 16, duration: 0.42, ease: "power3.out" });
+        });
+
+        if (judging && !root.dataset.mergeAnimated) {
+          const paths = gsap.utils.toArray<SVGPathElement>(".delib-merge");
+          paths.forEach((path) => {
+            if (path.classList.contains("delib-dissent")) {
+              gsap.set(path, { opacity: 0 });
+            } else {
+              const length = path.getTotalLength();
+              gsap.set(path, { strokeDasharray: length, strokeDashoffset: length });
+            }
+          });
+          gsap.to(".delib-merge:not(.delib-dissent)", {
+            strokeDashoffset: 0,
+            duration: 0.65,
+            stagger: 0.1,
+            ease: "power2.inOut",
+          });
+          gsap.to(".delib-dissent", { opacity: 1, duration: 0.5, delay: 0.35 });
+          gsap.from(".delib-diamond", {
+            scale: 0,
+            transformOrigin: "50% 50%",
+            duration: 0.45,
+            delay: 0.5,
+            ease: "back.out(2)",
+          });
+          root.dataset.mergeAnimated = "true";
+        }
+      }, root);
+    });
+
+    return () => {
+      cancelled = true;
+      ctx?.revert();
+    };
+  }, [question, statusSignature, judging]);
+
+  const elapsedMs = Math.max(
+    0,
+    ...Object.values(steps).map((step) => step.latencyMs ?? 0),
+  );
+  const convergence = result
+    ? result.final.confidence === "high"
+      ? "Convergence forte"
+      : result.final.confidence === "medium"
+        ? "Convergence partielle"
+        : "À vérifier"
+    : judging === "running"
+      ? "Synthèse en cours"
+      : "Analyses en cours";
+  const disagreement = result?.final.disagreements?.[0];
+
+  return (
+    <aside className="lg:sticky lg:top-[76px] lg:self-start">
+      <div
+        ref={rootRef}
+        className="overflow-hidden rounded-2xl border border-accent/20 bg-[rgba(4,13,9,.78)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] backdrop-blur-xl"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <p className="m-0 font-mono text-[11px] tracking-[0.16em] text-accent">
+            DÉLIBÉRATION
+          </p>
+          <span className="font-mono text-[10.5px] text-faint">
+            {elapsedMs > 0 ? `${Math.ceil(elapsedMs / 1000)} S` : "EN DIRECT"}
+          </span>
+        </div>
+
+        <div className="rounded-xl border border-white/[.1] bg-black/10 px-3 py-3">
+          <div className="flex items-start gap-2.5">
+            <span className="mt-[1px] font-mono text-[12px] text-accent">Q</span>
+            <p className="m-0 line-clamp-3 text-[12.5px] leading-[1.45] text-foreground">
+              {question || "Préparation de la question…"}
+            </p>
+          </div>
+        </div>
+
+        <svg viewBox="0 0 300 42" className="block w-full" aria-hidden>
+          <path className="delib-split" d="M150 2 C150 16 40 13 40 39" fill="none" stroke="rgba(127,240,194,.58)" strokeWidth="1.4" />
+          <path className="delib-split" d="M150 2 L150 39" fill="none" stroke="rgba(127,240,194,.58)" strokeWidth="1.4" />
+          <path className="delib-split" d="M150 2 C150 16 260 13 260 39" fill="none" stroke="rgba(127,240,194,.58)" strokeWidth="1.4" />
+          {[40, 150, 260].map((cx) => <circle key={cx} cx={cx} cy="39" r="2.3" fill="#7ff0c2" />)}
+        </svg>
+
+        <div className="space-y-2.5">
+          {visibleModels.map(({ modelId, model, step, index }) => {
+            const raw = step.content?.replace(/[#*_`>\[\]]/g, " ").replace(/\s+/g, " ").trim();
+            const preview = raw
+              ? raw.length > 145
+                ? `${raw.slice(0, 145)}…`
+                : raw
+              : step.status === "running"
+                ? "Analyse de la question en cours…"
+                : step.error || "Ce modèle n’a pas pu répondre.";
+            return (
+              <div
+                key={modelId}
+                className={`delib-card rounded-xl border px-3.5 py-3 ${
+                  step.status === "fail"
+                    ? "border-dashed border-white/[.16] opacity-65"
+                    : "border-accent/35 bg-accent/[.025]"
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="m-0 font-mono text-[11px] tracking-[0.13em] text-accent">
+                      MODÈLE {String.fromCharCode(65 + index)}
+                    </p>
+                    <p className="m-0 mt-0.5 truncate text-[10.5px] text-faint">
+                      {step.model ?? model.shortLabel}
+                    </p>
+                  </div>
+                  <span className={`rounded px-2 py-1 font-mono text-[9.5px] ${
+                    step.status === "ok"
+                      ? "bg-accent/[.12] text-accent"
+                      : step.status === "running"
+                        ? "animate-synth-pulse bg-accent/[.08] text-accent"
+                        : "bg-white/[.06] text-faint"
+                  }`}>
+                    {step.status === "ok" ? "RÉPONDU" : step.status === "running" ? "ANALYSE" : "ÉCHEC"}
+                  </span>
+                </div>
+                <p className="m-0 text-[12px] leading-[1.55] text-muted-fg">{preview}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {judging ? (
+          <>
+            <svg viewBox="0 0 300 58" className="block w-full" aria-hidden>
+              <path className="delib-merge" d="M40 2 C40 25 135 22 145 45" fill="none" stroke="rgba(43,245,168,.75)" strokeWidth="1.5" />
+              <path className="delib-merge" d="M150 2 L150 43" fill="none" stroke="rgba(43,245,168,.75)" strokeWidth="1.5" />
+              <path className="delib-merge delib-dissent" d="M260 2 C260 25 168 20 155 43" fill="none" stroke="rgba(127,240,194,.38)" strokeWidth="1.4" strokeDasharray="5 6" />
+              <g className="delib-diamond" transform="translate(150 46) rotate(45)">
+                <rect x="-9" y="-9" width="18" height="18" rx="3" fill="#2bf5a8" />
+                <rect x="-13" y="-13" width="26" height="26" rx="6" fill="none" stroke="rgba(43,245,168,.45)" />
+              </g>
+            </svg>
+            <div className="flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-accent/50 bg-accent/[.07] px-3 py-1.5 text-[11.5px] font-semibold text-accent">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                {convergence}
+              </span>
+            </div>
+          </>
+        ) : null}
+
+        {disagreement ? (
+          <div className="delib-card mt-4 rounded-xl border border-white/[.1] bg-black/10 px-3.5 py-3">
+            <p className="m-0 font-mono text-[10.5px] tracking-[0.14em] text-faint">
+              POINT DE DÉSACCORD
+            </p>
+            <p className="m-0 mt-2 text-[12px] leading-[1.55] text-muted-fg">
+              {disagreement}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 

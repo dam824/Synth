@@ -1,4 +1,4 @@
-// Couche de modération propre à Orsic (en complément des garde-fous des
+// Couche de modération propre au produit (en complément des garde-fous des
 // fournisseurs). Fonctions pures, sans accès base ni réseau : on décide d'une
 // action à partir du texte. Le stockage (SafetyLog) est fait par l'appelant.
 //

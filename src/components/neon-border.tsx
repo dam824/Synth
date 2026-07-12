@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
-// Bordure néon animée : un arc conique tourne derrière un cœur sombre, ne
-// laissant apparaître qu'un liseré lumineux qui « avance » autour de la carte.
+// Conteneur à bordure émeraude statique.
 export function NeonBorder({
   radius = 18,
   className = "",
@@ -20,7 +19,7 @@ export function NeonBorder({
     >
       <div
         className={`relative bg-[rgba(10,16,14,.92)] backdrop-blur-xl ${innerClassName}`}
-        style={{ margin: 1.5, borderRadius: radius - 2 }}
+        style={{ borderRadius: radius - 1 }}
       >
         {children}
       </div>

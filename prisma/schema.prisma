@@ -51,16 +51,82 @@ model User {
   role          UserRole  @default(USER)
   suspended     Boolean   @default(false)
 
-  accounts      Account[]
-  sessions      Session[]
+  accounts Account[]
+  sessions Session[]
 
-  conversations Conversation[]
-  projects      Project[]
-  usageLogs     UsageLog[]
-  safetyLogs    SafetyLog[]
+  conversations       Conversation[]
+  projects            Project[]
+  usageLogs           UsageLog[]
+  safetyLogs          SafetyLog[]
+  wallet              Wallet?
+  creditLedger        CreditLedger[]
+  billingCustomer     BillingCustomer?
+  billingSubscription BillingSubscription?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Crédits & facturation
+// ---------------------------------------------------------------------------
+
+model Wallet {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  balance           Int      @default(0)
+  lifetimePurchased Int      @default(0)
+  lifetimeSpent     Int      @default(0)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model CreditLedger {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String
+  amount          Int
+  balanceAfter    Int
+  status          String   @default("completed")
+  reason          String?
+  planKey         String?
+  stripeSessionId String?
+  stripePaymentId String?
+  stripeInvoiceId String?
+  idempotencyKey  String   @unique
+  metadata        Json?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([stripePaymentId])
+  @@index([stripeInvoiceId])
+}
+
+model BillingCustomer {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  stripeCustomerId String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model BillingSubscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeSubscriptionId String    @unique
+  stripePriceId        String
+  planKey              String
+  status               String
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status])
 }
 
 model Account {
@@ -122,16 +188,16 @@ model Project {
 }
 
 model Conversation {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
-  title     String   @default("Nouvelle conversation")
-  pinned    Boolean  @default(false)
-  archived  Boolean  @default(false)
+  title     String  @default("Nouvelle conversation")
+  pinned    Boolean @default(false)
+  archived  Boolean @default(false)
   projectId String?
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  prompts   Prompt[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  prompts Prompt[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -141,12 +207,12 @@ model Conversation {
 }
 
 model Prompt {
-  id             String   @id @default(cuid())
-  conversationId String
+  id                String  @id @default(cuid())
+  conversationId    String
   // Contenu en clair : conservé pour les anciens enregistrements (lecture).
   // Les nouveaux prompts laissent ce champ vide et remplissent les colonnes
   // chiffrées ci-dessous.
-  content        String?  @db.Text
+  content           String? @db.Text
   contentEncrypted  String? @db.Text
   contentNonce      String?
   contentKeyVersion Int     @default(1)
@@ -156,26 +222,26 @@ model Prompt {
   finalAnswer    FinalAnswer?
   usageLogs      UsageLog[]
 
-  createdAt      DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([conversationId])
 }
 
 // Réponse brute d'un fournisseur IA pour un prompt donné.
 model ModelResponse {
-  id        String   @id @default(cuid())
-  promptId  String
-  provider  String // "openai" | "anthropic" | "gemini"
-  model     String? // identifiant exact du modèle utilisé
-  content   String?  @db.Text // legacy clair (anciens enregistrements)
+  id                String  @id @default(cuid())
+  promptId          String
+  provider          String // "openai" | "anthropic" | "gemini"
+  model             String? // identifiant exact du modèle utilisé
+  content           String? @db.Text // legacy clair (anciens enregistrements)
   contentEncrypted  String? @db.Text
   contentNonce      String?
   contentKeyVersion Int     @default(1)
-  success   Boolean  @default(false)
-  error     String?  @db.Text // message d'erreur (métadonnée, non chiffré)
-  latencyMs Int?
+  success           Boolean @default(false)
+  error             String? @db.Text // message d'erreur (métadonnée, non chiffré)
+  latencyMs         Int?
 
-  prompt    Prompt   @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  prompt Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -184,29 +250,29 @@ model ModelResponse {
 
 // Réponse finale unique produite par le Juge.
 model FinalAnswer {
-  id            String   @id @default(cuid())
-  promptId      String   @unique
-  content       String?  @db.Text // legacy clair (anciens enregistrements)
+  id                String  @id @default(cuid())
+  promptId          String  @unique
+  content           String? @db.Text // legacy clair (anciens enregistrements)
   contentEncrypted  String? @db.Text
   contentNonce      String?
   contentKeyVersion Int     @default(1)
-  confidence    String // "high" | "medium" | "low"
-  disagreements String?  @db.Text // JSON sérialisé (liste de désaccords)
-  usedProviders String // JSON sérialisé (liste des fournisseurs exploités)
+  confidence        String // "high" | "medium" | "low"
+  disagreements     String? @db.Text // JSON sérialisé (liste de désaccords)
+  usedProviders     String // JSON sérialisé (liste des fournisseurs exploités)
 
-  prompt        Prompt   @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  prompt Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 // Journal d'utilisation (base pour facturation / quotas futurs).
 model UsageLog {
-  id                String   @id @default(cuid())
-  userId            String
-  promptId          String?
-  providersAttempted Int      @default(0)
-  providersSucceeded Int      @default(0)
-  confidence        String?
+  id                 String  @id @default(cuid())
+  userId             String
+  promptId           String?
+  providersAttempted Int     @default(0)
+  providersSucceeded Int     @default(0)
+  confidence         String?
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   prompt Prompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)

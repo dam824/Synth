@@ -3,19 +3,15 @@
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 
-import { Diamond } from "@/components/brand";
-import { SITE_CONFIG } from "@/config/site";
+import { Logo } from "@/components/brand";
 
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="animate-synth-rise w-full max-w-[392px]">
         <div className="mb-[30px] text-center">
-          <div className="mb-6 inline-flex items-center gap-[9px]">
-            <Diamond size={16} />
-            <span className="text-[21px] font-bold tracking-[-0.02em]">
-              {SITE_CONFIG.name}
-            </span>
+          <div className="mb-6 inline-flex">
+            <Logo size={20} />
           </div>
           <h1 className="m-0 mb-[9px] text-[24px] font-semibold tracking-[-0.02em]">
             Bon retour

@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -40 887 1124" width="887" height="1124">
+  <defs>
+    <radialGradient id="triTop" cx="0" cy="16" r="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f2f7f5"/>
+      <stop offset="0.42" stop-color="#b5e1d4"/>
+      <stop offset="0.72" stop-color="#9dd9c9"/>
+      <stop offset="1" stop-color="#9cd8c8"/>
+    </radialGradient>
+    <linearGradient id="diaBase" x1="393" y1="329" x2="394" y2="724" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60b49b"/>
+      <stop offset="1" stop-color="#67b8a1"/>
+    </linearGradient>
+    <linearGradient id="diaFacet" x1="408" y1="355" x2="527" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7ec9b3"/>
+      <stop offset="1" stop-color="#78c2ac"/>
+    </linearGradient>
+    <linearGradient id="diaTable" x1="300" y1="565" x2="428" y2="468" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#41e3b6"/>
+      <stop offset="0.55" stop-color="#a5e6cf"/>
+      <stop offset="1" stop-color="#cfeadf"/>
+    </linearGradient>
+    <linearGradient id="arrTop" x1="440" y1="296" x2="804" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#08c58f"/>
+      <stop offset="0.55" stop-color="#03b283"/>
+      <stop offset="0.85" stop-color="#028258"/>
+      <stop offset="1" stop-color="#013c20"/>
+    </linearGradient>
+    <linearGradient id="arrBot" x1="437" y1="764" x2="804" y2="527" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04c28e"/>
+      <stop offset="0.45" stop-color="#04966b"/>
+      <stop offset="0.8" stop-color="#026944"/>
+      <stop offset="1" stop-color="#01371e"/>
+    </linearGradient>
+    <linearGradient id="pyrTop" x1="0" y1="543" x2="390" y2="791" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#01b98c"/>
+      <stop offset="0.15" stop-color="#00e7b7"/>
+      <stop offset="0.45" stop-color="#65e7c5"/>
+      <stop offset="0.75" stop-color="#bbe6d9"/>
+      <stop offset="1" stop-color="#eef4f1"/>
+    </linearGradient>
+    <linearGradient id="pyrLeft" x1="30" y1="543" x2="30" y2="1041" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#02a078"/>
+      <stop offset="0.4" stop-color="#05b58c"/>
+      <stop offset="0.62" stop-color="#57b995"/>
+      <stop offset="1" stop-color="#87c6b2"/>
+    </linearGradient>
+    <linearGradient id="pyrBot" x1="290" y1="795" x2="0" y2="1041" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#37b49a"/>
+      <stop offset="0.5" stop-color="#70c1ab"/>
+      <stop offset="0.8" stop-color="#c0ded4"/>
+      <stop offset="1" stop-color="#e8f1ee"/>
+    </linearGradient>
+
+    <!-- Bande de brillance qui balaie le logo -->
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="logoClip">
+      <path d="M0 16 L390 264 L0 516 Z"/>
+      <path d="M393 329 L527 527 L394 724 L88 529 Z"/>
+      <path d="M440 296 L804 527 L437 764 L591 527 Z"/>
+      <path d="M0 543 L390 791 L0 1041 Z"/>
+    </clipPath>
+  </defs>
+
+  <style>
+    .p {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pulse 2s cubic-bezier(.45,0,.25,1) infinite;
+    }
+    .d1 { animation-delay: 0s; }
+    .d2 { animation-delay: .18s; }
+    .d3 { animation-delay: .36s; }
+    @keyframes pulse {
+      0%, 40%, 100% { transform: scale(1);   opacity: 1; }
+      12%           { transform: scale(.9); opacity: .6; }
+    }
+    .push {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: push 2s cubic-bezier(.45,0,.25,1) infinite .36s;
+    }
+    @keyframes push {
+      0%, 40%, 100% { transform: translateX(0) scale(1); opacity: 1; }
+      12%           { transform: translateX(26px) scale(.9); opacity: .6; }
+    }
+    .table {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: gem 2s ease-in-out infinite .18s;
+    }
+    @keyframes gem {
+      0%, 45%, 100% { transform: scale(1); }
+      15%           { transform: scale(1.22); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .p, .push, .table, .sweep { animation: none; }
+    }
+  </style>
+
+  <!-- Triangle haut-gauche -->
+  <g class="p d1">
+    <path d="M0 16 L390 264 L0 516 Z" fill="url(#triTop)"/>
+  </g>
+
+  <!-- Pyramide bas-gauche -->
+  <g class="p d1">
+    <path d="M0 543 L390 791 L150 790 Z" fill="url(#pyrTop)"/>
+    <path d="M0 543 L150 790 L0 1041 Z" fill="url(#pyrLeft)"/>
+    <path d="M150 790 L390 791 L0 1041 Z" fill="url(#pyrBot)"/>
+  </g>
+
+  <!-- Losange central -->
+  <g class="p d2">
+    <path d="M393 329 L527 527 L394 724 L88 529 Z" fill="url(#diaBase)"/>
+    <path d="M408 355 L527 527 L425 528 L358 429 Z" fill="url(#diaFacet)"/>
+    <g class="table">
+      <path d="M358 429 L425 528 L358 625 L292 528 Z" fill="url(#diaTable)"/>
+    </g>
+  </g>
+
+  <!-- Chevron droit : pousse vers l'avant -->
+  <g class="push">
+    <path d="M440 296 L804 527 L591 527 Z" fill="url(#arrTop)"/>
+    <path d="M591 527 L804 527 L437 764 Z" fill="url(#arrBot)"/>
+  </g>
+
+  <!-- Balayage lumineux, incliné, en boucle -->
+  <g clip-path="url(#logoClip)" class="sweep" opacity="0.9">
+    <rect x="-500" y="-200" width="400" height="1500" fill="url(#shine)" transform="skewX(-18)">
+      <animateTransform attributeName="transform" type="translate"
+        values="-350 0; 1550 0" keyTimes="0; 1"
+        dur="2s" repeatCount="indefinite" additive="sum"/>
+    </rect>
+  </g>
+</svg>

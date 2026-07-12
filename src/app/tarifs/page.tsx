@@ -1,8 +1,9 @@
 import Link from "next/link";
 
 import { auth } from "@/auth";
+import { BillingCheckoutButton } from "@/components/billing-checkout-button";
 import { Diamond, Logo } from "@/components/brand";
-import { NeonBorder } from "@/components/neon-border";
+import { PricingTiltCard } from "@/components/pricing-tilt-card";
 import { SITE_CONFIG } from "@/config/site";
 
 const PLANS = [
@@ -79,7 +80,6 @@ type TarifsPageProps = {
 export default async function TarifsPage({ searchParams }: TarifsPageProps) {
   const session = await auth();
   const params = await searchParams;
-  const selectedPlan = PLANS.find((plan) => plan.key === params?.pack);
   const appHref = session?.user ? "/app" : "/login";
 
   return (
@@ -98,17 +98,19 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
             >
               Tarifs
             </Link>
-            <Link
-              href="/login"
-              className="hidden h-[38px] items-center rounded-[10px] px-[14px] text-[14px] font-medium text-muted-fg transition hover:bg-white/[.05] sm:flex"
-            >
-              Se connecter
-            </Link>
+            {!session?.user ? (
+              <Link
+                href="/login"
+                className="hidden h-[38px] items-center rounded-[10px] px-[14px] text-[14px] font-medium text-muted-fg transition hover:bg-white/[.05] sm:flex"
+              >
+                Se connecter
+              </Link>
+            ) : null}
             <Link
               href={appHref}
               className="glass-accent flex h-[38px] items-center rounded-[10px] px-4 text-[14px] font-semibold tracking-[-0.01em] text-[#7FF0C2] transition hover:brightness-110"
             >
-              Essayer {SITE_CONFIG.name}
+              {session?.user ? "Accéder au chat" : `Essayer ${SITE_CONFIG.name}`}
             </Link>
           </div>
         </nav>
@@ -132,41 +134,47 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
             tâche, vous connaissez son coût maximal. Aucun dépassement sans
             votre confirmation.
           </p>
-          {params?.checkout === "soon" ? (
+          {params?.checkout === "success" ? (
             <div className="glass-accent mt-7 max-w-[620px] rounded-2xl px-5 py-4 text-[14.5px] leading-[1.5] text-[#B9F8DA]">
-              Le paiement de l&apos;offre {selectedPlan?.name ?? "sélectionnée"} sera
-              branché via Stripe. Pour l&apos;instant, aucun débit n&apos;est
-              lancé depuis cette page.
+              <p className="m-0">
+                Paiement reçu. Votre abonnement et vos crédits ont été confirmés.
+              </p>
+              <Link
+                href="/app"
+                className="mt-3 inline-flex font-semibold text-accent underline decoration-accent/40 underline-offset-4"
+              >
+                Accéder au chat →
+              </Link>
+            </div>
+          ) : null}
+          {params?.checkout === "cancel" ? (
+            <div className="glass mt-7 max-w-[620px] rounded-2xl px-5 py-4 text-[14.5px] leading-[1.5] text-muted-fg">
+              Paiement annulé. Aucun abonnement n&apos;a été créé.
             </div>
           ) : null}
         </header>
 
-        <section className="grid grid-cols-1 gap-[16px] pb-[48px] lg:grid-cols-3">
-          {PLANS.map((plan) => (
-            <NeonBorder
-              key={plan.key}
-              radius={16}
-              className={plan.featured ? "shadow-accent" : ""}
-              innerClassName="h-full p-5"
-            >
-              <div className="flex h-full flex-col">
+        <section className="relative pb-[64px] pt-4">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-x-20 -inset-y-12 bg-[radial-gradient(ellipse_at_78%_48%,rgba(26,239,161,.13),transparent_34%),radial-gradient(ellipse_at_48%_10%,rgba(74,205,255,.06),transparent_32%)] blur-2xl"
+          />
+          <div className="relative grid grid-cols-1 gap-5 lg:grid-cols-3 lg:items-stretch">
+            {PLANS.map((plan) => (
+              <PricingTiltCard key={plan.key} featured={plan.featured}>
+              <div className="flex h-full min-h-[570px] flex-col p-7">
                 <div className="mb-5 flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="m-0 text-[22px] font-bold tracking-[-0.02em]">
+                    <h2 className="m-0 text-[28px] font-bold tracking-[-0.03em]">
                       {plan.name}
                     </h2>
-                    <p className="m-0 mt-1 text-[13px] text-faint">
+                    <p className="m-0 mt-2 min-h-[42px] text-[13.5px] leading-[1.55] text-muted-fg">
                       {plan.description}
                     </p>
                   </div>
-                  {plan.featured ? (
-                    <span className="glass-accent rounded-full px-3 py-1 text-[12px] font-semibold text-[#7FF0C2]">
-                      Le plus choisi
-                    </span>
-                  ) : null}
                 </div>
 
-                <p className="m-0 text-[34px] font-bold tracking-[-0.03em]">
+                <p className="m-0 mt-2 text-[42px] font-bold tracking-[-0.045em] text-foreground">
                   {plan.price}
                 </p>
                 <p className="m-0 mt-1 text-[13px] text-faint">{plan.cadence}</p>
@@ -175,35 +183,43 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
                 </p>
                 <p className="m-0 mt-1 text-[13px] text-muted-fg">{plan.equivalent}</p>
 
-                <ul className="mt-5 flex flex-1 list-none flex-col gap-3 p-0 text-[14px] text-muted-fg">
+                <ul className="mt-6 flex flex-1 list-none flex-col gap-3.5 p-0 text-[14px] leading-[1.5] text-muted-fg">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex gap-2">
-                      <span className="text-accent">✓</span>
+                      <span className="mt-[1px] text-accent drop-shadow-[0_0_8px_rgba(43,245,168,.5)]">✓</span>
                       <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                <Link
-                  href={
-                    session?.user
-                      ? plan.key === "decouverte"
+                {session?.user && (plan.key === "essentiel" || plan.key === "pro") ? (
+                  <BillingCheckoutButton planKey={plan.key}>
+                    {plan.cta}
+                  </BillingCheckoutButton>
+                ) : (
+                  <Link
+                    href={
+                      session?.user
                         ? "/app"
-                        : `/tarifs?checkout=soon&pack=${plan.key}`
-                      : `/login?callbackUrl=/tarifs?pack=${plan.key}`
-                  }
-                  className="mt-6 inline-flex h-[44px] items-center justify-center rounded-[12px] bg-primary px-4 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:opacity-90"
+                        : `/login?callbackUrl=${encodeURIComponent(`/tarifs?pack=${plan.key}`)}`
+                    }
+                    className="mt-6 inline-flex h-[44px] items-center justify-center rounded-[12px] bg-primary px-4 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:brightness-110"
+                  >
+                    {plan.cta}
+                  </Link>
+                )}
+                <p
+                  className={`mb-0 mt-3 min-h-[17px] text-center text-[11.5px] text-faint ${
+                    plan.key === "decouverte" ? "invisible" : ""
+                  }`}
+                  aria-hidden={plan.key === "decouverte"}
                 >
-                  {plan.cta}
-                </Link>
-                {plan.key !== "decouverte" ? (
-                  <p className="mb-0 mt-3 text-center text-[11.5px] text-faint">
-                    Sans engagement · Résiliable à tout moment
-                  </p>
-                ) : null}
+                  Sans engagement · Résiliable à tout moment
+                </p>
               </div>
-            </NeonBorder>
-          ))}
+              </PricingTiltCard>
+            ))}
+          </div>
         </section>
 
         <section className="pb-[60px]">
