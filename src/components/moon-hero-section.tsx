@@ -27,7 +27,6 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
   const descRef = useRef<HTMLParagraphElement>(null);
   const bottomLineRef = useRef<HTMLSpanElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const els = {
@@ -54,10 +53,9 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
 
     let ctx: { revert: () => void } | undefined;
     let cancelled = false;
-    void Promise.all([import("gsap"), import("gsap/ScrollTrigger")]).then(
-      ([{ gsap }, { ScrollTrigger }]) => {
+    let removeIntroListener: (() => void) | undefined;
+    void import("gsap").then(({ gsap }) => {
       if (cancelled) return;
-      gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
         gsap.set([logo, word], { y: "42vh", autoAlpha: 0 });
         gsap.set(kicker, { autoAlpha: 0, y: 12 });
@@ -68,7 +66,10 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
         gsap.set(bottomLine, { scaleX: 0, autoAlpha: 0, transformOrigin: "50% 50%" });
         gsap.set(cta, { autoAlpha: 0, y: 24 });
 
-        const tl = gsap.timeline();
+        // En pause : la séquence ne démarre qu'à la fin de l'intro du site
+        // (SiteIntro émet « themis:intro-done ») — sinon tout se jouerait
+        // derrière l'overlay d'intro et serait déjà terminé à sa disparition.
+        const tl = gsap.timeline({ paused: true });
         // 1. Le logo apparaît et monte de derrière la lune…
         tl.to(logo, { autoAlpha: 1, duration: 0.8, ease: "power1.out" }, 0.3)
           .to(logo, { y: 0, duration: 2.4, ease: "power3.out" }, 0.3)
@@ -87,55 +88,34 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
           // 6. CTA + mention.
           .to(cta, { autoAlpha: 1, y: 0, duration: 0.9, ease: "power2.out" }, 3.8);
 
-        // Garde-fou : si l'utilisateur scrolle pendant l'intro, on l'amène en
-        // douceur à son état final (un progress(1) sec ferait SAUTER tous les
-        // éléments d'un coup).
-        ScrollTrigger.create({
-          trigger: "#page-content",
-          start: "top 99%",
-          once: true,
-          onEnter: () => {
-            if (tl.progress() < 1) {
-              gsap.to(tl, { progress: 1, duration: 0.5, ease: "power1.out" });
-            }
-          },
-        });
-
-        // Effet « feuille » : la section est sticky, la suite de la page
-        // (#page-content) glisse par-dessus. Pendant le recouvrement, la lune
-        // recule et s'assombrit doucement (scrub = suit le scroll).
-        if (innerRef.current) {
-          gsap.to(innerRef.current, {
-            scale: 0.94,
-            autoAlpha: 0.35,
-            transformOrigin: "50% 30%",
-            ease: "none",
-            scrollTrigger: {
-              trigger: "#page-content",
-              start: "top bottom",
-              end: "top top",
-              // Scrub amorti (0.5 s de lissage) : absorbe les crans de molette,
-              // évite les à-coups visibles sur le recul de la lune.
-              scrub: 0.5,
-            },
-          });
+        // Démarrage : tout de suite si l'intro est déjà passée (flag global),
+        // sinon au signal de fin d'intro. Filet de sécurité à 8 s au cas où le
+        // signal ne viendrait jamais (l'animation ne doit pas rester bloquée).
+        const introDone = (window as unknown as { __themisIntroDone?: boolean })
+          .__themisIntroDone;
+        if (introDone) {
+          tl.play();
+        } else {
+          const start = () => tl.play();
+          window.addEventListener("themis:intro-done", start, { once: true });
+          const fallback = window.setTimeout(start, 8000);
+          removeIntroListener = () => {
+            window.removeEventListener("themis:intro-done", start);
+            window.clearTimeout(fallback);
+          };
         }
       });
     });
 
     return () => {
       cancelled = true;
+      removeIntroListener?.();
       ctx?.revert();
     };
   }, []);
 
   return (
-    // Sticky : la section se fige en haut pendant que #page-content (la
-    // « feuille » suivante) glisse par-dessus. ⚠️ aucun ancêtre ne doit avoir
-    // overflow hidden/auto (casse le sticky) — la page racine est en
-    // overflow-x-clip pour cette raison.
-    <section className="sticky top-0 z-0 h-screen min-h-svh overflow-hidden bg-black">
-      <div ref={innerRef} className="absolute inset-0">
+    <section className="relative h-screen min-h-svh overflow-hidden bg-black">
       {/* Lockup derrière le canvas : émerge de derrière la lune */}
       <div className="absolute inset-x-0 top-[30%] z-0 flex flex-col items-center px-[4vw]">
         <div className="flex w-[64vw] items-center gap-[1.8vw]">
@@ -207,7 +187,6 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
       </div>
 
       <MoonHero className="absolute inset-0 z-[1]" />
-      </div>
     </section>
   );
 }

@@ -2,6 +2,14 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 
+// Signale la fin de l'intro aux autres animations de la page (ex. le hero
+// lune attend ce signal pour lancer son fade-in-up). Flag global + événement :
+// le flag couvre les listeners attachés après coup.
+function signalIntroDone() {
+  (window as unknown as { __themisIntroDone?: boolean }).__themisIntroDone = true;
+  window.dispatchEvent(new Event("themis:intro-done"));
+}
+
 export function SiteIntro() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
@@ -11,6 +19,7 @@ export function SiteIntro() {
     try {
       if (window.sessionStorage.getItem(storageKey)) {
         setVisible(false);
+        signalIntroDone(); // pas d'intro cette session → le hero démarre direct
         return;
       }
       window.sessionStorage.setItem(storageKey, "1");
@@ -56,6 +65,7 @@ export function SiteIntro() {
           onComplete: () => {
             document.body.style.overflow = previousOverflow;
             setVisible(false);
+            signalIntroDone();
           },
         });
 
