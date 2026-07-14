@@ -6,6 +6,7 @@ import { HomeFaq } from "@/components/home-faq";
 import { HomeMotion } from "@/components/home-motion";
 import { MoonHeroSection } from "@/components/moon-hero-section";
 import { SiteIntro } from "@/components/site-intro";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import { NeonBorder } from "@/components/neon-border";
 import { SITE_CONFIG } from "@/config/site";
 
@@ -124,10 +125,12 @@ export default async function HomePage() {
   const startHref = session?.user ? "/app" : "/login";
 
   return (
-    <div className="home-motion relative min-h-screen overflow-hidden">
+    // overflow-x-clip (PAS hidden) : un ancêtre en overflow hidden casserait
+    // le position:sticky de la section lune (effet « feuille »).
+    <div className="home-motion relative min-h-screen overflow-x-clip">
       <SiteIntro />
       <HomeMotion />
-      <div className="synth-orbs" />
+      <SmoothScroll />
 
       {/* ============ NAV (fixe, flotte au-dessus de la lune et du contenu) ============ */}
       <div className="fixed inset-x-0 top-4 z-50 px-6">
@@ -164,9 +167,20 @@ export default async function HomePage() {
         </nav>
       </div>
 
-      {/* Hero lunaire 3D plein écran (arc supérieur) — au-dessus du hero produit */}
-      <MoonHeroSection />
+      {/* Hero lunaire 3D plein écran, sticky — la suite glisse par-dessus */}
+      <MoonHeroSection startHref={startHref} />
 
+      {/* ============ LA « FEUILLE » : tout le reste de la page recouvre la
+           lune au scroll (fond opaque, coins arrondis, liseré + ombre) ===== */}
+      <div
+        id="page-content"
+        className="relative z-10 overflow-hidden rounded-t-[36px] bg-background shadow-[0_-40px_120px_rgba(0,0,0,.75)]"
+      >
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[rgba(43,245,168,.35)] to-transparent"
+        />
+        <div className="synth-orbs !absolute" />
 
       <div className="synth-scroll relative z-10 mx-auto max-w-[1200px] px-6">
         {/* ============ HERO ============ */}
@@ -788,6 +802,7 @@ export default async function HomePage() {
             <span>Contact</span>
           </div>
         </footer>
+      </div>
       </div>
     </div>
   );

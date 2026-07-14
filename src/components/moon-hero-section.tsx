@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useLayoutEffect, useRef } from "react";
 
 // Three.js a besoin de `window` → import sans SSR. Ce wrapper est un Client
@@ -8,40 +9,64 @@ import { useLayoutEffect, useRef } from "react";
 // un Server Component en Next 15). La page (server) importe ce composant tel quel.
 const MoonHero = dynamic(() => import("@/components/MoonRealistic"), { ssr: false });
 
-// Section hero plein écran. Le lockup (logo + wordmark) est placé DERRIÈRE le
-// canvas (z-0 vs z-[1]) : le canvas est transparent hors de la sphère, mais la
-// lune est opaque → le lockup émerge de derrière l'arc, et le bas du wordmark
-// reste légèrement caché par la lune une fois en place.
-export function MoonHeroSection() {
+const LINE_GRADIENT =
+  "linear-gradient(90deg, rgba(255,255,255,0), rgba(128,240,232,.3) 12%, rgba(255,255,255,.85) 32%, rgba(255,255,255,.85) 68%, rgba(128,240,232,.3) 88%, rgba(255,255,255,0))";
+
+// Section hero plein écran, disposition type « 21hrs on the Moon » :
+//   [—— UNE DEMANDE · PLUSIEURS ANALYSES ——]
+//   [logo]  Themis            ← derrière le canvas : émerge de derrière la lune
+//   description               ← sur la lune (au-dessus du canvas)
+//   [———— trait ————]
+//   [CTA]  + mention discrète
+export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }) {
   const logoRef = useRef<HTMLImageElement>(null);
   const wordRef = useRef<HTMLHeadingElement>(null);
-  const lineLRef = useRef<HTMLSpanElement>(null);
-  const lineRRef = useRef<HTMLSpanElement>(null);
+  const kickerRef = useRef<HTMLSpanElement>(null);
+  const topLineLRef = useRef<HTMLSpanElement>(null);
+  const topLineRRef = useRef<HTMLSpanElement>(null);
+  const descRef = useRef<HTMLParagraphElement>(null);
+  const bottomLineRef = useRef<HTMLSpanElement>(null);
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const logo = logoRef.current;
-    const word = wordRef.current;
-    const lineL = lineLRef.current;
-    const lineR = lineRRef.current;
-    if (!logo || !word || !lineL || !lineR) return;
+    const els = {
+      logo: logoRef.current,
+      word: wordRef.current,
+      kicker: kickerRef.current,
+      topLineL: topLineLRef.current,
+      topLineR: topLineRRef.current,
+      desc: descRef.current,
+      bottomLine: bottomLineRef.current,
+      cta: ctaRef.current,
+    };
+    if (Object.values(els).some((el) => !el)) return;
+    const { logo, word, kicker, topLineL, topLineR, desc, bottomLine, cta } =
+      els as Record<keyof typeof els, HTMLElement>;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      [logo, word, lineL, lineR].forEach((el) => {
-        el.style.opacity = "1";
-        el.style.transform = "none";
+      Object.values(els).forEach((el) => {
+        el!.style.opacity = "1";
+        el!.style.transform = "none";
       });
       return;
     }
 
     let ctx: { revert: () => void } | undefined;
     let cancelled = false;
-    void import("gsap").then(({ gsap }) => {
+    void Promise.all([import("gsap"), import("gsap/ScrollTrigger")]).then(
+      ([{ gsap }, { ScrollTrigger }]) => {
       if (cancelled) return;
+      gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
         gsap.set([logo, word], { y: "42vh", autoAlpha: 0 });
-        // Traits : invisibles, repliés sur leur centre (ils s'élargiront
-        // symétriquement vers la gauche et la droite).
-        gsap.set([lineL, lineR], { scaleX: 0, autoAlpha: 0, transformOrigin: "50% 50%" });
+        gsap.set(kicker, { autoAlpha: 0, y: 12 });
+        // Segments du haut : ils s'étendent depuis le kicker vers l'extérieur.
+        gsap.set(topLineL, { scaleX: 0, autoAlpha: 0, transformOrigin: "100% 50%" });
+        gsap.set(topLineR, { scaleX: 0, autoAlpha: 0, transformOrigin: "0% 50%" });
+        gsap.set(desc, { autoAlpha: 0, y: 24 });
+        gsap.set(bottomLine, { scaleX: 0, autoAlpha: 0, transformOrigin: "50% 50%" });
+        gsap.set(cta, { autoAlpha: 0, y: 24 });
 
         const tl = gsap.timeline();
         // 1. Le logo apparaît et monte de derrière la lune…
@@ -50,10 +75,51 @@ export function MoonHeroSection() {
           // 2. …et pendant qu'il monte, le wordmark le suit.
           .to(word, { autoAlpha: 1, duration: 0.8, ease: "power1.out" }, 0.95)
           .to(word, { y: 0, duration: 2.4, ease: "power3.out" }, 0.95)
-          // 3. Une fois logo ET wordmark posés, les DEUX traits se forment en
-          //    simultané depuis leur centre, symétriquement vers les deux côtés.
-          .to([lineL, lineR], { autoAlpha: 1, duration: 0.4, ease: "power1.out" }, 3.0)
-          .to([lineL, lineR], { scaleX: 1, duration: 1.3, ease: "power2.out" }, 3.0);
+          // 3. Lockup posé : kicker + traits du haut (vers l'extérieur).
+          .to(kicker, { autoAlpha: 1, y: 0, duration: 0.7, ease: "power2.out" }, 3.0)
+          .to([topLineL, topLineR], { autoAlpha: 1, duration: 0.4, ease: "power1.out" }, 3.0)
+          .to([topLineL, topLineR], { scaleX: 1, duration: 1.3, ease: "power2.out" }, 3.0)
+          // 4. Description sur la lune.
+          .to(desc, { autoAlpha: 1, y: 0, duration: 0.9, ease: "power2.out" }, 3.35)
+          // 5. Trait du bas (depuis le centre, symétrique).
+          .to(bottomLine, { autoAlpha: 1, duration: 0.4, ease: "power1.out" }, 3.55)
+          .to(bottomLine, { scaleX: 1, duration: 1.3, ease: "power2.out" }, 3.55)
+          // 6. CTA + mention.
+          .to(cta, { autoAlpha: 1, y: 0, duration: 0.9, ease: "power2.out" }, 3.8);
+
+        // Garde-fou : si l'utilisateur scrolle pendant l'intro, on l'amène en
+        // douceur à son état final (un progress(1) sec ferait SAUTER tous les
+        // éléments d'un coup).
+        ScrollTrigger.create({
+          trigger: "#page-content",
+          start: "top 99%",
+          once: true,
+          onEnter: () => {
+            if (tl.progress() < 1) {
+              gsap.to(tl, { progress: 1, duration: 0.5, ease: "power1.out" });
+            }
+          },
+        });
+
+        // Effet « feuille » : la section est sticky, la suite de la page
+        // (#page-content) glisse par-dessus. Pendant le recouvrement, la lune
+        // recule et s'assombrit doucement (scrub = suit le scroll).
+        if (innerRef.current) {
+          gsap.to(innerRef.current, {
+            scale: 0.94,
+            autoAlpha: 0.35,
+            transformOrigin: "50% 30%",
+            ease: "none",
+            scrollTrigger: {
+              trigger: "#page-content",
+              start: "top bottom",
+              end: "top top",
+              // Scrub amorti (0.5 s de lissage) : absorbe les crans de molette,
+              // évite les à-coups visibles sur le recul de la lune.
+              scrub: 0.5,
+            },
+          });
+        }
       });
     });
 
@@ -64,20 +130,35 @@ export function MoonHeroSection() {
   }, []);
 
   return (
-    <section className="relative h-screen min-h-svh overflow-hidden bg-black">
-      {/* Lockup derrière le canvas : émerge de derrière la lune.
-          Traits fins au-dessus et en dessous, formés depuis leur centre. */}
-      <div className="absolute inset-x-0 top-[38%] z-0 flex flex-col items-center px-[4vw]">
-        <span
-          ref={lineLRef}
-          aria-hidden
-          className="mb-[4vh] h-px w-[64vw] opacity-0"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(255,255,255,0), rgba(128,240,232,.3) 12%, rgba(255,255,255,.85) 32%, rgba(255,255,255,.85) 68%, rgba(128,240,232,.3) 88%, rgba(255,255,255,0))",
-          }}
-        />
-        <div className="flex items-center justify-center gap-[2.5vw]">
+    // Sticky : la section se fige en haut pendant que #page-content (la
+    // « feuille » suivante) glisse par-dessus. ⚠️ aucun ancêtre ne doit avoir
+    // overflow hidden/auto (casse le sticky) — la page racine est en
+    // overflow-x-clip pour cette raison.
+    <section className="sticky top-0 z-0 h-screen min-h-svh overflow-hidden bg-black">
+      <div ref={innerRef} className="absolute inset-0">
+      {/* Lockup derrière le canvas : émerge de derrière la lune */}
+      <div className="absolute inset-x-0 top-[30%] z-0 flex flex-col items-center px-[4vw]">
+        <div className="flex w-[64vw] items-center gap-[1.8vw]">
+          <span
+            ref={topLineLRef}
+            aria-hidden
+            className="h-px flex-1 opacity-0"
+            style={{ background: LINE_GRADIENT }}
+          />
+          <span
+            ref={kickerRef}
+            className="whitespace-nowrap font-mono text-[11px] tracking-[0.28em] text-[#B9D6CB] opacity-0 sm:text-[13px]"
+          >
+            UNE DEMANDE · PLUSIEURS ANALYSES
+          </span>
+          <span
+            ref={topLineRRef}
+            aria-hidden
+            className="h-px flex-1 opacity-0"
+            style={{ background: LINE_GRADIENT }}
+          />
+        </div>
+        <div className="mt-[3vh] flex items-center justify-center gap-[2.5vw]">
           <img
             ref={logoRef}
             src="/brand/themis-loader.svg"
@@ -95,17 +176,38 @@ export function MoonHeroSection() {
             Themis
           </h1>
         </div>
-        <span
-          ref={lineRRef}
-          aria-hidden
-          className="mt-[4vh] h-px w-[56vw] opacity-0"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(255,255,255,0), rgba(128,240,232,.3) 12%, rgba(255,255,255,.85) 32%, rgba(255,255,255,.85) 68%, rgba(128,240,232,.3) 88%, rgba(255,255,255,0))",
-          }}
-        />
       </div>
+
+      {/* Contenu SUR la lune (au-dessus du canvas) */}
+      <div className="absolute inset-x-0 top-[58%] z-[2] flex flex-col items-center px-6">
+        <p
+          ref={descRef}
+          className="m-0 max-w-[640px] text-center text-[15.5px] font-semibold leading-[1.65] text-[#D7E5DE] opacity-0 sm:text-[17px]"
+        >
+          Themis confronte plusieurs intelligences artificielles, révèle leurs
+          désaccords et vous livre une réponse plus solide.
+        </p>
+        <span
+          ref={bottomLineRef}
+          aria-hidden
+          className="mt-[3.5vh] h-px w-[56vw] opacity-0"
+          style={{ background: LINE_GRADIENT }}
+        />
+        <div ref={ctaRef} className="mt-[5vh] flex flex-col items-center opacity-0">
+          <Link
+            href={startHref}
+            className="inline-flex items-center gap-3 rounded-[14px] bg-primary px-9 py-[17px] font-mono text-[14px] font-bold uppercase tracking-[0.18em] text-primary-fg shadow-[0_0_40px_rgba(43,245,168,.35)] transition hover:-translate-y-px hover:brightness-110"
+          >
+            Lancer une analyse <span aria-hidden>→</span>
+          </Link>
+          <p className="m-0 mt-4 font-mono text-[12px] tracking-[0.08em] text-[#93A39B]">
+            Sans carte bancaire · 100 crédits offerts
+          </p>
+        </div>
+      </div>
+
       <MoonHero className="absolute inset-0 z-[1]" />
+      </div>
     </section>
   );
 }
