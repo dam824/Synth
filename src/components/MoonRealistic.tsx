@@ -52,11 +52,12 @@ const CONFIG = {
   ambientIntensity: 0.01,     // quasi nul : les faces non éclairées tombent au noir
   albedoScalar: 0.05,         // écrase la map couleur (0.03 noir ↔ 0.14 plus clair)
   toneMappingExposure: 0.6,   // enfonce les noirs (n'affecte pas le rim, ajouté après)
-  // Parallaxe souris : la caméra glisse légèrement vers le pointeur (amorti).
-  // La lune ne bouge pas : aucun conflit avec le cadrage. 0 = désactivé.
-  parallaxX: 0.05,            // amplitude horizontale (unités monde, rester < 0.15)
-  parallaxY: 0.03,            // amplitude verticale
-  parallaxEase: 0.045,        // amorti (plus petit = plus doux/lent)
+  // Suivi souris : la lune s'incline vers le pointeur (offset d'orientation
+  // amorti, en radians), pendant que le spin X continue. Le liseré (espace
+  // vue/monde) et le cadrage ne sont pas affectés. 0 = rotation X pure.
+  followAmountX: 0.22,        // inclinaison horizontale max (rad) — souris gauche/droite
+  followAmountY: 0.12,        // inclinaison verticale max (rad) — souris haut/bas
+  followEase: 0.05,           // amorti du suivi (plus petit = plus doux/lent)
 };
 
 // ─── Rim teal : injecté dans le MeshStandardMaterial via onBeforeCompile ────
@@ -218,29 +219,34 @@ export default function MoonRealistic({ className, onReady }: MoonRealisticProps
 
     onReady?.({ moon, camera });
 
-    // Parallaxe souris : glisse la caméra (x/y seulement) vers le pointeur,
-    // avec amorti. La lune et le cadrage (frame) ne sont pas touchés.
+    // Suivi souris : la lune s'incline vers le pointeur (offsets d'orientation
+    // amortis) pendant que le spin X continue. Seule l'orientation du mesh
+    // change — cadrage, caméra et liseré (espace vue/monde) restent intacts.
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const pointer = { tx: 0, ty: 0, x: 0, y: 0 };
     const onPointerMove = (e: PointerEvent) => {
       pointer.tx = (e.clientX / window.innerWidth) * 2 - 1;
       pointer.ty = (e.clientY / window.innerHeight) * 2 - 1;
     };
-    const parallaxOn =
-      !reducedMotion && (CONFIG.parallaxX > 0 || CONFIG.parallaxY > 0);
-    if (parallaxOn) window.addEventListener("pointermove", onPointerMove);
+    const followOn =
+      !reducedMotion && (CONFIG.followAmountX > 0 || CONFIG.followAmountY > 0);
+    if (followOn) window.addEventListener("pointermove", onPointerMove);
 
     // Boucle
     let raf = 0;
+    let spinAngle = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      moon.rotation.x -= CONFIG.speed; // le bas de la surface remonte
-      if (parallaxOn) {
-        pointer.x += (pointer.tx - pointer.x) * CONFIG.parallaxEase;
-        pointer.y += (pointer.ty - pointer.y) * CONFIG.parallaxEase;
-        camera.position.x = pointer.x * CONFIG.parallaxX;
-        camera.position.y = -pointer.y * CONFIG.parallaxY;
+      spinAngle -= CONFIG.speed; // le bas de la surface remonte
+      if (followOn) {
+        pointer.x += (pointer.tx - pointer.x) * CONFIG.followEase;
+        pointer.y += (pointer.ty - pointer.y) * CONFIG.followEase;
       }
+      moon.rotation.set(
+        spinAngle + pointer.y * CONFIG.followAmountY,
+        pointer.x * CONFIG.followAmountX,
+        0,
+      );
       renderer.render(scene, camera);
     };
     tick();
@@ -257,7 +263,7 @@ export default function MoonRealistic({ className, onReady }: MoonRealisticProps
     // Cleanup (React 19 + StrictMode monte/démonte 2×)
     return () => {
       cancelAnimationFrame(raf);
-      if (parallaxOn) window.removeEventListener("pointermove", onPointerMove);
+      if (followOn) window.removeEventListener("pointermove", onPointerMove);
       ro.disconnect();
       geometry.dispose();
       material.dispose();
