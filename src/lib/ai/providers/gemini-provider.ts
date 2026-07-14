@@ -22,7 +22,9 @@ export async function callGemini(
   const ai = new GoogleGenAI({ apiKey });
 
   const textAttachments = attachments.filter((a) => a.kind === "text");
-  const imageAttachments = attachments.filter((a) => a.kind === "image");
+  const mediaAttachments = attachments.filter(
+    (a) => a.kind === "image" || a.kind === "document",
+  );
   const textContext =
     textAttachments.length > 0
       ? `\n\nDocuments joints :\n${textAttachments
@@ -30,12 +32,12 @@ export async function callGemini(
           .join("\n\n")}`
       : "";
   const contents =
-    imageAttachments.length > 0
+    mediaAttachments.length > 0
       ? [
           { text: `${prompt}${textContext}` },
-          ...imageAttachments.map((a) => ({
+          ...mediaAttachments.map((a) => ({
             inlineData: {
-              mimeType: a.mimeType,
+              mimeType: a.kind === "document" ? "application/pdf" : a.mimeType,
               data: a.data,
             },
           })),

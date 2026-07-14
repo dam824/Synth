@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { Logo, ThemisMark } from "@/components/brand";
 import { HomeFaq } from "@/components/home-faq";
 import { HomeMotion } from "@/components/home-motion";
+import { MoonHeroSection } from "@/components/moon-hero-section";
 import { SiteIntro } from "@/components/site-intro";
 import { NeonBorder } from "@/components/neon-border";
 import { SITE_CONFIG } from "@/config/site";
@@ -12,7 +13,7 @@ import { SITE_CONFIG } from "@/config/site";
 const STEPS = [
   {
     n: "1",
-    title: "Posez votre question",
+    title: "Formulez votre demande",
     body: "Décrivez votre situation naturellement. Aucun modèle à choisir, aucun réglage technique.",
   },
   {
@@ -70,7 +71,7 @@ const BENEFITS = [
   },
   {
     title: "Aucun modèle à sélectionner",
-    body: "Vos questions sont traitées simultanément par plusieurs modèles de premier plan.",
+    body: "Vos demandes sont traitées simultanément par plusieurs modèles de premier plan.",
   },
   {
     title: "Plusieurs analyses confrontées",
@@ -94,7 +95,7 @@ const BENEFITS = [
 const TRUST = [
   {
     t: "Données chiffrées au repos",
-    b: "Vos questions et synthèses sont stockées chiffrées.",
+    b: "Vos demandes et synthèses sont stockées chiffrées.",
   },
   {
     t: "Historique contrôlable",
@@ -128,9 +129,9 @@ export default async function HomePage() {
       <HomeMotion />
       <div className="synth-orbs" />
 
-      <div className="synth-scroll relative z-10 mx-auto max-w-[1200px] px-6">
-        {/* ============ NAV ============ */}
-        <nav className="glass sticky top-4 z-30 mt-5 flex items-center justify-between rounded-2xl py-[11px] pl-[18px] pr-3">
+      {/* ============ NAV (fixe, flotte au-dessus de la lune et du contenu) ============ */}
+      <div className="fixed inset-x-0 top-4 z-50 px-6">
+        <nav className="glass mx-auto flex max-w-[1200px] items-center justify-between rounded-2xl py-[11px] pl-[18px] pr-3">
           <Link href="/" aria-label={`Accueil ${SITE_CONFIG.name}`} data-home-logo>
             <Logo />
           </Link>
@@ -161,11 +162,17 @@ export default async function HomePage() {
             </Link>
           </div>
         </nav>
+      </div>
 
+      {/* Hero lunaire 3D plein écran (arc supérieur) — au-dessus du hero produit */}
+      <MoonHeroSection />
+
+
+      <div className="synth-scroll relative z-10 mx-auto max-w-[1200px] px-6">
         {/* ============ HERO ============ */}
         <header
           id="top"
-          className="relative grid grid-cols-1 items-center gap-14 py-[80px] md:grid-cols-[1.05fr_.95fr] md:py-[96px]"
+          className="relative grid min-h-[90vh] grid-cols-1 items-center gap-14 py-[80px] md:grid-cols-[1.05fr_.95fr] md:py-[96px]"
         >
           <div
             aria-hidden
@@ -176,16 +183,16 @@ export default async function HomePage() {
             }}
           />
 
-          <div className="relative" data-hero-copy>
+          <div className="relative z-10" data-hero-copy>
             <div className="glass-accent inline-flex items-center gap-[9px] rounded-full px-4 py-2">
               <span className="animate-synth-glow h-[6px] w-[6px] rounded-full bg-accent shadow-glow" />
               <span className="text-[14px] text-[#7FF0C2]">
-                Une question, plusieurs analyses
+                Une demande, plusieurs analyses
               </span>
             </div>
 
             <h1 className="m-0 mt-[26px] text-[44px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[64px]">
-              Une question importante{" "}
+              Une demande importante{" "}
               <span className="bg-gradient-to-r from-accent to-[#7FF0C2] bg-clip-text text-transparent">
                 mérite plusieurs avis.
               </span>
@@ -203,7 +210,7 @@ export default async function HomePage() {
                 href={startHref}
                 className="inline-flex items-center gap-[10px] rounded-[14px] bg-primary px-7 py-4 text-[16px] font-bold text-primary-fg shadow-glow transition hover:brightness-110 hover:-translate-y-px"
               >
-                Poser ma première question <span aria-hidden>→</span>
+                Lancer ma première analyse <span aria-hidden>→</span>
               </Link>
               <a
                 href="#comment"
@@ -218,7 +225,7 @@ export default async function HomePage() {
           </div>
 
           {/* Panneau démo */}
-          <div data-hero-panel>
+          <div className="relative z-10" data-hero-panel>
           <NeonBorder
             radius={20}
             className="animate-synth-float"
@@ -572,7 +579,7 @@ export default async function HomePage() {
               CAS D&apos;USAGE
             </p>
             <h2 className="m-0 mt-[18px] text-[30px] font-bold tracking-[-0.025em] sm:text-[44px]">
-              Pour les questions que vous comptez réellement utiliser.
+              Pour les demandes dont le résultat doit réellement vous servir.
             </h2>
           </div>
           <div className="mt-14 grid grid-cols-1 gap-7 sm:grid-cols-3">

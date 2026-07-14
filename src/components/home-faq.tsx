@@ -15,7 +15,7 @@ const FAQ = [
   },
   {
     q: "Comment fonctionnent les crédits ?",
-    a: "Chaque formule inclut un budget mensuel de crédits. Une synthèse standard consomme environ 20 crédits ; une question rapide, 5 à 10. Le coût maximal est annoncé avant chaque exécution et aucun dépassement n'a lieu sans votre confirmation.",
+    a: "Chaque formule inclut un budget mensuel de crédits. Une synthèse standard consomme environ 20 crédits ; une demande rapide, 5 à 10. Le coût maximal est annoncé avant chaque exécution et aucun dépassement n'a lieu sans votre confirmation.",
   },
   {
     q: "Que se passe-t-il si un modèle ne répond pas ?",
@@ -27,7 +27,7 @@ const FAQ = [
   },
   {
     q: "Comment mes données sont-elles traitées ?",
-    a: "Vos questions et synthèses sont stockées chiffrées au repos. Vous contrôlez votre historique — consultation, export, suppression — et chaque synthèse indique quels modèles ont été sollicités. Le détail figure dans notre politique de confidentialité.",
+    a: "Vos demandes et synthèses sont stockées chiffrées au repos. Vous contrôlez votre historique — consultation, export, suppression — et chaque synthèse indique quels modèles ont été sollicités. Le détail figure dans notre politique de confidentialité.",
   },
 ];
 

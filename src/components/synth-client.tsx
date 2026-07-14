@@ -93,7 +93,7 @@ interface ClarificationQuestion {
 }
 
 interface ClientAttachment {
-  kind: "image" | "text";
+  kind: "image" | "text" | "document";
   name: string;
   mimeType: string;
   data: string;
@@ -164,6 +164,7 @@ const SPORT_NUTRITION_CLARIFICATIONS: ClarificationQuestion[] = [
 ];
 const MAX_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 4_800_000;
+const MAX_PDF_BYTES = 10_000_000;
 const MAX_TEXT_BYTES = 240_000;
 const SUPPORTED_TEXT_TYPES = new Set([
   "text/plain",
@@ -171,6 +172,10 @@ const SUPPORTED_TEXT_TYPES = new Set([
   "text/csv",
   "application/json",
 ]);
+
+function isSvg(file: File): boolean {
+  return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+}
 
 function shouldClarify(prompt: string): boolean {
   const text = prompt.toLowerCase();
@@ -1447,9 +1452,41 @@ export function SynthClient({
 
     const next: ClientAttachment[] = [];
     for (const file of selected) {
+      // SVG : envoyé en texte (XML) — le modèle lit formes, couleurs et textes.
+      if (isSvg(file)) {
+        if (file.size > MAX_TEXT_BYTES) {
+          setAttachmentError("SVG trop lourd. Limite : environ 240 Ko.");
+          continue;
+        }
+        next.push({
+          kind: "text",
+          name: file.name,
+          mimeType: "image/svg+xml",
+          data: await file.text(),
+        });
+        continue;
+      }
+
+      // PDF : lu nativement par les modèles (texte + mise en page + visuels).
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        if (file.size > MAX_PDF_BYTES) {
+          setAttachmentError("PDF trop lourd. Limite : environ 10 Mo.");
+          continue;
+        }
+        const dataUrl = await readAsDataUrl(file);
+        const data = dataUrl.split(",")[1] ?? "";
+        next.push({
+          kind: "document",
+          name: file.name,
+          mimeType: "application/pdf",
+          data,
+        });
+        continue;
+      }
+
       if (file.type.startsWith("image/")) {
         if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
-          setAttachmentError("Images acceptées : PNG, JPG, WEBP ou GIF.");
+          setAttachmentError("Images acceptées : PNG, JPG, WEBP, GIF ou SVG.");
           continue;
         }
         if (file.size > MAX_IMAGE_BYTES) {
@@ -2543,7 +2580,11 @@ export function SynthClient({
                               />
                             ) : (
                               <span className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-soft font-mono text-[10px] text-accent">
-                                TXT
+                                {attachment.kind === "document"
+                                  ? "PDF"
+                                  : attachment.mimeType === "image/svg+xml"
+                                    ? "SVG"
+                                    : "TXT"}
                               </span>
                             )}
                             <span className="truncate text-[12.5px] text-[#C8F7E4]">
@@ -2589,7 +2630,7 @@ export function SynthClient({
                       <input
                         type="file"
                         multiple
-                        accept="image/png,image/jpeg,image/webp,image/gif,text/plain,text/markdown,text/csv,application/json,.txt,.md,.csv,.json"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,text/plain,text/markdown,text/csv,application/json,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.txt,.md,.csv,.json"
                         className="hidden"
                         onChange={(e) => {
                           addFiles(e.target.files);

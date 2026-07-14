@@ -21,26 +21,36 @@ export async function callAnthropic(
 
   const textAttachments = attachments.filter((a) => a.kind === "text");
   const imageAttachments = attachments.filter((a) => a.kind === "image");
+  const documentAttachments = attachments.filter((a) => a.kind === "document");
   const textContext =
     textAttachments.length > 0
       ? `\n\nDocuments joints :\n${textAttachments
           .map((a) => `### ${a.name}\n${a.data}`)
           .join("\n\n")}`
       : "";
-  const userContent =
-    imageAttachments.length > 0
-      ? [
-          { type: "text" as const, text: `${prompt}${textContext}` },
-          ...imageAttachments.map((a) => ({
-            type: "image" as const,
-            source: {
-              type: "base64" as const,
-              media_type: a.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-              data: a.data,
-            },
-          })),
-        ]
-      : `${prompt}${textContext}`;
+  const hasMedia = imageAttachments.length > 0 || documentAttachments.length > 0;
+  const userContent = hasMedia
+    ? [
+        { type: "text" as const, text: `${prompt}${textContext}` },
+        ...imageAttachments.map((a) => ({
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: a.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: a.data,
+          },
+        })),
+        ...documentAttachments.map((a) => ({
+          type: "document" as const,
+          title: a.name,
+          source: {
+            type: "base64" as const,
+            media_type: "application/pdf" as const,
+            data: a.data,
+          },
+        })),
+      ]
+    : `${prompt}${textContext}`;
 
   const message = await client.messages.create(
     {

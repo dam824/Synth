@@ -7,7 +7,10 @@ export type ConfidenceLevel = "high" | "medium" | "low";
 export type ReflectionMode = "fast" | "deep";
 
 export interface UserAttachment {
-  kind: "image" | "text";
+  // "image"  → image raster (png/jpeg/webp/gif), envoyée en vision
+  // "text"   → contenu texte brut (txt/md/csv/json) ou SVG (XML)
+  // "document" → PDF (base64), lu nativement par les modèles
+  kind: "image" | "text" | "document";
   name: string;
   mimeType: string;
   data: string;

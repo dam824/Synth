@@ -48,13 +48,15 @@ const PROVIDERS: {
 const PROVIDER_MAP = new Map(PROVIDERS.map((p) => [p.name, p]));
 const MAX_ATTACHMENTS = 4;
 const MAX_IMAGE_BASE64_CHARS = 6_500_000;
-const MAX_TEXT_CHARS = 60_000;
+const MAX_DOC_BASE64_CHARS = 14_000_000;
+const MAX_TEXT_CHARS = 200_000;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const TEXT_TYPES = new Set([
   "text/plain",
   "text/markdown",
   "text/csv",
   "application/json",
+  "image/svg+xml",
 ]);
 
 function normalizeModelOrder(value: unknown): ModelChoiceId[] {
@@ -80,10 +82,19 @@ function parseAttachments(value: unknown): UserAttachment[] {
         : "fichier";
     const mimeType = typeof raw.mimeType === "string" ? raw.mimeType : "";
     const data = typeof raw.data === "string" ? raw.data : "";
-    const kind = raw.kind === "image" || raw.kind === "text" ? raw.kind : null;
+    const kind =
+      raw.kind === "image" || raw.kind === "text" || raw.kind === "document"
+        ? raw.kind
+        : null;
     if (!kind || !data) return [];
     if (kind === "image") {
       if (!IMAGE_TYPES.has(mimeType) || data.length > MAX_IMAGE_BASE64_CHARS) {
+        return [];
+      }
+      return [{ kind, name, mimeType, data }];
+    }
+    if (kind === "document") {
+      if (mimeType !== "application/pdf" || data.length > MAX_DOC_BASE64_CHARS) {
         return [];
       }
       return [{ kind, name, mimeType, data }];
@@ -99,7 +110,10 @@ function buildStoredPromptContent(prompt: string, attachments: UserAttachment[])
     if (a.kind === "image") {
       return `[Image jointe : ${a.name} (${a.mimeType})]`;
     }
-    return `[Document texte joint : ${a.name}]\n${a.data.slice(0, MAX_TEXT_CHARS)}`;
+    if (a.kind === "document") {
+      return `[PDF joint : ${a.name}]`;
+    }
+    return `[Document joint : ${a.name}]\n${a.data.slice(0, MAX_TEXT_CHARS)}`;
   });
   return `${prompt}\n\nPièces jointes mémorisées :\n${blocks.join("\n\n")}`;
 }
