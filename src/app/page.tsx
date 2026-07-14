@@ -124,10 +124,11 @@ export default async function HomePage() {
   const startHref = session?.user ? "/app" : "/login";
 
   return (
-    <div className="home-motion relative min-h-screen overflow-hidden">
+    // overflow-x-clip (PAS hidden) : un ancêtre en overflow hidden casserait
+    // le position:sticky de la section lune.
+    <div className="home-motion relative min-h-screen overflow-x-clip">
       <SiteIntro />
       <HomeMotion />
-      <div className="synth-orbs" />
 
       {/* ============ NAV (fixe, flotte au-dessus de la lune et du contenu) ============ */}
       <div className="fixed inset-x-0 top-4 z-50 px-6">
@@ -164,8 +165,13 @@ export default async function HomePage() {
         </nav>
       </div>
 
-      {/* Hero lunaire 3D plein écran (arc supérieur) — au-dessus du hero produit */}
+      {/* Hero lunaire 3D plein écran, figé — le panneau suivant glisse par-dessus */}
       <MoonHeroSection startHref={startHref} />
+
+      {/* Panneau opaque qui recouvre la lune au scroll (translation native,
+          aucun tween : c'est le flux normal du document qui fait l'effet). */}
+      <div id="page-content" className="relative z-10 bg-background">
+        <div className="synth-orbs !absolute" />
 
       <div className="synth-scroll relative z-10 mx-auto max-w-[1200px] px-6">
         {/* ============ HERO ============ */}
@@ -787,6 +793,7 @@ export default async function HomePage() {
             <span>Contact</span>
           </div>
         </footer>
+      </div>
       </div>
     </div>
   );

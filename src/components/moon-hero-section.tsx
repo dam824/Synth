@@ -115,7 +115,11 @@ export function MoonHeroSection({ startHref = "/login" }: { startHref?: string }
   }, []);
 
   return (
-    <section className="relative h-screen min-h-svh overflow-hidden bg-black">
+    // Figée en haut (équivalent CSS du « pin » GSAP) : la section suivante
+    // glisse par-dessus en remontant, puis le site scrolle normalement.
+    // ⚠️ aucun ancêtre en overflow hidden/auto (casserait le sticky) — la
+    // racine de la page est en overflow-x-clip pour ça.
+    <section className="sticky top-0 z-0 h-screen min-h-svh overflow-hidden bg-black">
       {/* Lockup derrière le canvas : émerge de derrière la lune */}
       <div className="absolute inset-x-0 top-[30%] z-0 flex flex-col items-center px-[4vw]">
         <div className="flex w-[64vw] items-center gap-[1.8vw]">

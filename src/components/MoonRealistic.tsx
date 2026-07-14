@@ -232,11 +232,21 @@ export default function MoonRealistic({ className, onReady }: MoonRealisticProps
       !reducedMotion && (CONFIG.followAmountX > 0 || CONFIG.followAmountY > 0);
     if (followOn) window.addEventListener("pointermove", onPointerMove);
 
+    // Le hero est sticky : le panneau suivant le recouvre au scroll. Dès qu'il
+    // est entièrement caché (scroll > 1 écran), on suspend le rendu WebGL —
+    // laisser tourner un canvas plein écran invisible coûte cher en GPU.
+    let covered = false;
+    const onScroll = () => {
+      covered = window.scrollY >= window.innerHeight;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
     // Boucle
     let raf = 0;
     let spinAngle = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      if (covered) return;
       spinAngle -= CONFIG.speed; // le bas de la surface remonte
       if (followOn) {
         pointer.x += (pointer.tx - pointer.x) * CONFIG.followEase;
@@ -263,6 +273,7 @@ export default function MoonRealistic({ className, onReady }: MoonRealisticProps
     // Cleanup (React 19 + StrictMode monte/démonte 2×)
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
       if (followOn) window.removeEventListener("pointermove", onPointerMove);
       ro.disconnect();
       geometry.dispose();
