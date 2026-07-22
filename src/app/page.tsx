@@ -19,12 +19,12 @@ const STEPS = [
   {
     n: "2",
     title: `${SITE_CONFIG.name} confronte plusieurs IA`,
-    body: "Plusieurs modèles analysent votre demande indépendamment. Leurs convergences et divergences sont comparées.",
+    body: "Plusieurs modèles analysent votre demande indépendamment. Leurs accords, désaccords et incertitudes sont ensuite confrontés.",
   },
   {
     n: "3",
-    title: "Recevez une réponse consolidée",
-    body: "Une synthèse unique, ses points clés, les désaccords utiles et un indicateur de convergence.",
+    title: "Recevez une synthèse unique",
+    body: "Les conclusions sont réunies dans une synthèse claire, avec les désaccords utiles et les points à vérifier.",
   },
 ];
 
@@ -75,7 +75,7 @@ const BENEFITS = [
   },
   {
     title: "Plusieurs analyses confrontées",
-    body: `${SITE_CONFIG.name} confronte les réponses, repère les convergences et filtre le bruit.`,
+    body: `${SITE_CONFIG.name} confronte leurs conclusions, repère les accords et filtre le bruit.`,
   },
   {
     title: "Désaccords importants visibles",
@@ -87,7 +87,7 @@ const BENEFITS = [
   },
   {
     title: "Coût annoncé avant l'exécution",
-    body: "Chaque tâche affiche son coût maximal avant de lancer. Aucun dépassement sans confirmation.",
+    body: "Chaque opération affiche son coût maximal avant son lancement. Aucun dépassement sans confirmation.",
   },
 ];
 
@@ -114,7 +114,7 @@ const TRUST = [
     b: "Le coût maximal est affiché avant chaque exécution.",
   },
   {
-    t: "Aucun quota caché",
+    t: "Une consommation toujours visible",
     b: "Vos crédits, leur usage et leur solde sont consultables à tout moment.",
   },
 ];
@@ -192,7 +192,7 @@ export default async function HomePage() {
             <div className="glass-accent inline-flex items-center gap-[9px] rounded-full px-4 py-2">
               <span className="animate-synth-glow h-[6px] w-[6px] rounded-full bg-accent shadow-glow" />
               <span className="text-[14px] text-[#7FF0C2]">
-                Une demande, plusieurs analyses
+                Une demande · plusieurs analyses · une synthèse plus solide
               </span>
             </div>
 
@@ -205,9 +205,8 @@ export default async function HomePage() {
 
             <p className="m-0 mt-[26px] max-w-[520px] text-[18px] leading-[1.7] text-muted-fg">
               {SITE_CONFIG.name} confronte plusieurs modèles d&apos;IA, repère
-              leurs désaccords et rassemble leurs analyses dans une réponse
-              consolidée, avec les points à retenir et les incertitudes à
-              connaître.
+              leurs désaccords et rassemble leurs analyses dans une synthèse
+              unique. Les points à retenir et les incertitudes restent visibles.
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-[14px]">
@@ -215,7 +214,7 @@ export default async function HomePage() {
                 href={startHref}
                 className="inline-flex items-center gap-[10px] rounded-[14px] bg-primary px-7 py-4 text-[16px] font-bold text-primary-fg shadow-glow transition hover:brightness-110 hover:-translate-y-px"
               >
-                Lancer ma première analyse <span aria-hidden>→</span>
+                Lancer ma première synthèse <span aria-hidden>→</span>
               </Link>
               <a
                 href="#comment"
@@ -255,7 +254,7 @@ export default async function HomePage() {
                 </span>
               </div>
 
-              {/* Trajectoires : question → 3 modèles → synthèse */}
+              {/* Trajectoires : demande → 3 modèles → synthèse */}
               <svg
                 viewBox="0 0 440 150"
                 className="my-1 block h-auto w-full"
@@ -289,7 +288,7 @@ export default async function HomePage() {
                 <div className="mb-3 flex items-center gap-3">
                   <span id="hero-badge" className="glass-accent inline-flex items-center gap-2 rounded-full px-[13px] py-[6px] text-[12.5px] font-semibold text-accent">
                     <span className="h-[6px] w-[6px] rounded-full bg-accent" />
-                    Convergence forte
+                    Conclusions proches
                   </span>
                   <span className="font-mono text-[12px] tracking-[0.08em] text-faint">
                     SYNTHÉTISÉE
@@ -315,8 +314,8 @@ export default async function HomePage() {
               POURQUOI {SITE_CONFIG.name.toUpperCase()}
             </p>
             <h2 className="m-0 mt-[18px] text-[30px] font-bold leading-[1.15] tracking-[-0.025em] sm:text-[44px]">
-              Vous n&apos;avez pas besoin d&apos;une réponse de plus. Vous avez
-              besoin de savoir laquelle retenir.
+              Une seule conclusion ne suffit pas toujours. Confrontez plusieurs
+              analyses avant de décider.
             </h2>
           </div>
 
@@ -330,13 +329,13 @@ export default async function HomePage() {
               </h3>
               <div className="flex flex-col gap-[10px]">
                 <div className="glass-soft rounded-[11px] px-4 py-[13px] text-[14px] text-muted-fg [transform:rotate(-1deg)]">
-                  Réponse A — « Augmentez d&apos;un coup, assumez. »
+                  Analyse A — « Augmentez d&apos;un coup, assumez. »
                 </div>
                 <div className="glass-soft rounded-[11px] px-4 py-[13px] text-[14px] text-muted-fg [transform:rotate(0.8deg)_translateX(10px)]">
-                  Réponse B — « Procédez par paliers de 5 %. »
+                  Analyse B — « Procédez par paliers de 5 %. »
                 </div>
                 <div className="glass-soft rounded-[11px] px-4 py-[13px] text-[14px] text-muted-fg [transform:rotate(-0.6deg)_translateX(-6px)]">
-                  Réponse C — « Attendez le prochain trimestre. »
+                  Analyse C — « Attendez le prochain trimestre. »
                 </div>
               </div>
               <p className="m-0 mt-[18px] text-[14.5px] leading-[1.65] text-muted-fg">
@@ -350,7 +349,7 @@ export default async function HomePage() {
                 AVEC {SITE_CONFIG.name.toUpperCase()}
               </p>
               <h3 className="m-0 mb-[18px] mt-[14px] text-[23px] font-bold">
-                Une réponse consolidée.
+                Une synthèse consolidée.
               </h3>
               <div className="rounded-[12px] border border-accent/20 bg-accent/[.04] px-[18px] py-4">
                 <p className="m-0 mb-2 text-[15px] font-semibold text-foreground">
@@ -494,7 +493,7 @@ export default async function HomePage() {
               <div className="flex flex-col gap-[14px]">
                 <div className="glass-soft rounded-[12px] px-[17px] py-[15px]">
                   <p className="m-0 mb-[6px] font-mono text-[11px] tracking-[0.14em] text-faint">
-                    VOTRE QUESTION
+                    VOTRE DEMANDE
                   </p>
                   <p className="m-0 text-[14.5px] leading-[1.55] text-foreground">
                     Quels risques dois-je anticiper avant d&apos;augmenter mes
@@ -519,7 +518,7 @@ export default async function HomePage() {
                     <span className="font-mono text-[11px] tracking-[0.14em] text-faint">
                       CONVERGENCE
                     </span>
-                    <span className="text-[13px] font-semibold text-accent">Forte</span>
+                    <span className="text-[13px] font-semibold text-accent">Conclusions proches</span>
                   </div>
                   <div className="h-[6px] overflow-hidden rounded-full bg-white/[.08]">
                     <div id="conv-fill" className="h-full w-[82%] origin-left rounded-full bg-gradient-to-r from-accent to-[#7FF0C2]" />
@@ -531,7 +530,7 @@ export default async function HomePage() {
                 <div className="mb-[14px] flex items-center gap-[10px]">
                   <span className="glass-accent inline-flex items-center gap-[7px] rounded-full px-3 py-[5px] text-[12px] font-semibold text-accent">
                     <span className="h-[6px] w-[6px] rounded-full bg-accent" />
-                    Réponse consolidée
+                    Synthèse consolidée
                   </span>
                 </div>
                 <p className="m-0 mb-[14px] text-[16px] font-bold leading-[1.45] text-foreground">
@@ -645,12 +644,12 @@ export default async function HomePage() {
                   TARIFS
                 </p>
                 <h2 className="m-0 mt-[18px] text-[30px] font-bold tracking-[-0.025em] sm:text-[40px]">
-                  Des réponses consolidées. Des règles claires.
+                  Des synthèses consolidées. Des règles claires.
                 </h2>
                 <p className="m-0 mt-5 max-w-[520px] text-[16px] leading-[1.7] text-muted-fg">
                   Chaque formule inclut un budget mensuel de crédits. Avant chaque
-                  tâche, vous connaissez son coût maximal — aucun dépassement sans
-                  votre confirmation.
+                  opération, vous connaissez son coût maximal — aucun dépassement
+                  sans votre confirmation.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-[14px]">
                   <Link
@@ -756,9 +755,9 @@ export default async function HomePage() {
                 <ThemisMark size={54} glow />
               </div>
               <h2 className="m-0 mx-auto max-w-[820px] text-[32px] font-extrabold leading-[1.12] tracking-[-0.03em] sm:text-[52px]">
-                La prochaine fois qu&apos;une réponse compte,{" "}
+                La prochaine fois qu&apos;une demande compte,{" "}
                 <span className="bg-gradient-to-r from-accent to-[#7FF0C2] bg-clip-text text-transparent">
-                  demandez plusieurs avis en une fois.
+                  confrontez plusieurs analyses en une fois.
                 </span>
               </h2>
               <p className="m-0 mx-auto mt-[22px] max-w-[480px] text-[16.5px] leading-[1.7] text-muted-fg">

@@ -7,11 +7,11 @@ import { SITE_CONFIG } from "@/config/site";
 const FAQ = [
   {
     q: `J'utilise déjà ChatGPT. Pourquoi ${SITE_CONFIG.name} ?`,
-    a: `ChatGPT vous donne une réponse. ${SITE_CONFIG.name} en confronte plusieurs : les convergences sont réunies, les désaccords importants restent visibles et un indicateur de convergence vous dit à quel point les analyses s'accordent. Vous gagnez le recul que donne une comparaison, sans la faire à la main.`,
+    a: `Un chatbot mono-modèle produit directement un résultat. ${SITE_CONFIG.name} lance plusieurs analyses depuis une seule demande, confronte leurs conclusions et vous remet une synthèse unique. Les désaccords et les incertitudes restent visibles au lieu d'être comparés à la main dans plusieurs onglets.`,
   },
   {
-    q: "Plusieurs IA ont-elles forcément raison ?",
-    a: `Non, et ${SITE_CONFIG.name} ne le prétend pas. Plusieurs analyses peuvent converger vers une même erreur. C'est pourquoi ${SITE_CONFIG.name} affiche les points à vérifier et les incertitudes plutôt que de promettre une réponse garantie. L'objectif est davantage de recul, pas l'infaillibilité.`,
+    q: "Des conclusions proches garantissent-elles que la synthèse est vraie ?",
+    a: `Non. La convergence mesure le niveau d'accord entre les analyses, jamais la vérité du résultat. Plusieurs modèles peuvent partager la même erreur. ${SITE_CONFIG.name} fait donc ressortir les points à vérifier et les incertitudes : la méthode apporte davantage de recul, pas une garantie d'infaillibilité.`,
   },
   {
     q: "Comment fonctionnent les crédits ?",
@@ -19,7 +19,11 @@ const FAQ = [
   },
   {
     q: "Que se passe-t-il si un modèle ne répond pas ?",
-    a: `La synthèse est produite à partir des analyses disponibles, et ${SITE_CONFIG.name} indique quels modèles ont effectivement contribué. Si le nombre d'analyses est insuffisant pour une confrontation utile, la tâche n'est pas facturée.`,
+    a: `La synthèse est produite à partir des analyses disponibles, et ${SITE_CONFIG.name} indique quels modèles ont effectivement contribué. Si leur nombre est insuffisant pour une confrontation utile, l'opération n'est pas facturée.`,
+  },
+  {
+    q: "Pourquoi la synthèse n'est-elle pas instantanée ?",
+    a: `Plusieurs modèles analysent d'abord votre demande. ${SITE_CONFIG.name} confronte ensuite leurs conclusions avant de produire la synthèse. Vous suivez chaque étape en direct pendant ce traitement.`,
   },
   {
     q: "Puis-je résilier mon abonnement facilement ?",

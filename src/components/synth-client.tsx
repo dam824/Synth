@@ -4,6 +4,7 @@ import { signOut } from "next-auth/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Logo, ThemisMark } from "@/components/brand";
+import { FormattedAnswer } from "@/components/formatted-answer";
 import { SITE_CONFIG } from "@/config/site";
 import {
   DEFAULT_MODEL_ORDER,
@@ -12,6 +13,7 @@ import {
   MODEL_CHOICES,
   type ModelChoiceId,
 } from "@/lib/ai/model-catalog";
+import { extractJsonStringField } from "@/lib/ai/judge-output";
 import type {
   ConfidenceLevel,
   JudgeResult,
@@ -79,6 +81,25 @@ interface FinalPayload {
   providers: ProviderView[];
 }
 
+function normalizeFinalPayload(payload: FinalPayload): FinalPayload {
+  const rawAnswer = payload.final.finalAnswer;
+  const recoveredAnswer = extractJsonStringField(rawAnswer, "finalAnswer");
+  if (!recoveredAnswer) return payload;
+
+  const recoveredTitle =
+    extractJsonStringField(rawAnswer, "title") ??
+    extractJsonStringField(payload.final.title, "title");
+
+  return {
+    ...payload,
+    final: {
+      ...payload.final,
+      title: recoveredTitle ?? payload.final.title,
+      finalAnswer: recoveredAnswer,
+    },
+  };
+}
+
 // Un échange complet (question + réponse) dans le fil de conversation.
 interface ThreadTurn {
   question: string;
@@ -116,8 +137,8 @@ const MODEL_SELECT_OPTIONS = MODEL_CHOICES.map((model) => ({
 
 const STATUS_TEXT: Record<StepStatus, string> = {
   idle: "en attente",
-  running: "réfléchit…",
-  ok: "a répondu",
+  running: "analyse…",
+  ok: "analyse terminée",
   fail: "indisponible",
 };
 
@@ -240,12 +261,18 @@ function renderMarkdownToHtml(markdown: string): string {
   const lines = markdown.replace(/\r/g, "").split("\n");
   const out: string[] = [];
   let i = 0;
-  let listOpen = false;
+  let listType: "ul" | "ol" | null = null;
   const closeList = () => {
-    if (listOpen) {
-      out.push("</ul>");
-      listOpen = false;
+    if (listType) {
+      out.push(`</${listType}>`);
+      listType = null;
     }
+  };
+  const openList = (type: "ul" | "ol") => {
+    if (listType === type) return;
+    closeList();
+    out.push(`<${type}>`);
+    listType = type;
   };
   const parseRow = (l: string) =>
     l
@@ -258,6 +285,22 @@ function renderMarkdownToHtml(markdown: string): string {
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      closeList();
+      const language = trimmed.slice(3).trim().replace(/[^a-z0-9_-]/gi, "");
+      const code: string[] = [];
+      i += 1;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length) i += 1;
+      out.push(
+        `<div class="code-block"><div class="code-toolbar"><span>${language || "code"}</span><button type="button" data-copy-code>Copier</button></div><pre><code>${escapeHtml(code.join("\n"))}</code></pre></div>`,
+      );
+      continue;
+    }
 
     // Tableau : ligne avec | suivie d'une ligne de séparation |---|---|
     if (
@@ -296,6 +339,13 @@ function renderMarkdownToHtml(markdown: string): string {
       continue;
     }
 
+    if (/^(?:---+|___+|\*\*\*+)$/.test(trimmed)) {
+      closeList();
+      out.push("<hr>");
+      i += 1;
+      continue;
+    }
+
     let m: RegExpMatchArray | null;
     if ((m = trimmed.match(/^#{2,3}\s+(.*)/))) {
       closeList();
@@ -323,10 +373,13 @@ function renderMarkdownToHtml(markdown: string): string {
       continue;
     }
     if ((m = trimmed.match(/^[-*]\s+(.*)/))) {
-      if (!listOpen) {
-        out.push("<ul>");
-        listOpen = true;
-      }
+      openList("ul");
+      out.push(`<li>${inlineMarkdown(m[1])}</li>`);
+      i += 1;
+      continue;
+    }
+    if ((m = trimmed.match(/^\d+[.)]\s+(.*)/))) {
+      openList("ol");
       out.push(`<li>${inlineMarkdown(m[1])}</li>`);
       i += 1;
       continue;
@@ -340,56 +393,62 @@ function renderMarkdownToHtml(markdown: string): string {
   return out.join("\n");
 }
 
-// Document HTML complet, stylé (bandeau vert, tableaux, encadrés), destiné à
-// l'impression → PDF via le moteur Chrome du visiteur.
-// Retire les emojis (qui s'impriment en carrés vides dans le PDF).
-function stripEmoji(text: string): string {
-  return text
-    .replace(
-      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu,
-      "",
-    )
-    .replace(/[ \t]{2,}/g, " ");
-}
-
 function buildStyledPrintDoc(
   title: string,
-  _question: string,
+  question: string,
   answerMarkdown: string,
 ): string {
-  const body = renderMarkdownToHtml(stripEmoji(answerMarkdown));
-  const cleanTitle = stripEmoji(title).trim();
+  const body = renderMarkdownToHtml(answerMarkdown);
+  const cleanTitle = title.trim();
+  const generatedAt = new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "long",
+  }).format(new Date());
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <title>${escapeHtml(cleanTitle)}</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { font-family: "Georgia", "Times New Roman", serif; color: #1c2621; }
-  .banner { background: linear-gradient(135deg, #0f2a1e 0%, #1f5132 100%); color: #fff; padding: 34px 40px 30px; }
-  .banner .kicker { margin: 0 0 10px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #7fe0b0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", Arial, sans-serif; color: #17231d; background: #fff; }
+  .banner { background: linear-gradient(135deg, #0f2a1e 0%, #1f5132 100%); color: #fff; padding: 34px 40px 30px; break-inside: avoid; }
+  .banner .kicker { margin: 0 0 10px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #7fe0b0; }
   .banner h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+  .banner .date { margin: 14px 0 0; color: #b8d9c7; font-size: 11px; }
   .content { padding: 30px 40px 46px; }
+  .question { margin: 0 0 24px; padding: 14px 16px; border: 1px solid #dce8e1; border-radius: 10px; background: #f6faf7; color: #3a4a42; font-size: 12.5px; line-height: 1.55; }
   .content > p:first-child { font-size: 15px; color: #3a4a42; }
-  .content h2 { color: #1f5132; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 700; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #e3ede7; }
-  .content p { font-size: 13.5px; line-height: 1.65; margin: 0 0 11px; }
-  .content ul { margin: 0 0 14px; padding-left: 20px; }
-  .content li { font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; }
+  .content h2 { color: #1f5132; font-size: 17px; font-weight: 700; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #e3ede7; break-after: avoid-page; }
+  .content p { font-size: 13.5px; line-height: 1.65; margin: 0 0 11px; orphans: 3; widows: 3; }
+  .content ul, .content ol { margin: 0 0 14px; padding-left: 22px; }
+  .content li { font-size: 13.5px; line-height: 1.6; margin-bottom: 6px; break-inside: avoid-page; }
   strong { font-weight: 700; color: #17231d; }
   code { background: #eef2f0; padding: 1px 5px; border-radius: 4px; font-family: "SFMono-Regular", Menlo, monospace; font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 12.5px; box-shadow: 0 1px 0 #e3ede7; }
+  .code-block { margin: 16px 0 22px; break-inside: avoid; }
+  .code-toolbar { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px 8px 0 0; background: #25302b; color: #b8c6bf; font: 10px "SFMono-Regular", Menlo, monospace; text-transform: uppercase; }
+  .code-toolbar button { display: none; }
+  pre { margin: 0; padding: 15px; overflow-wrap: anywhere; white-space: pre-wrap; border-radius: 0 0 8px 8px; background: #17201c; color: #eef7f1; }
+  pre code { padding: 0; background: transparent; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 12.5px; box-shadow: 0 1px 0 #e3ede7; }
+  thead { display: table-header-group; }
   th { background: #1f5132; color: #fff; text-align: left; padding: 11px 13px; font-weight: 600; }
   td { padding: 10px 13px; border-bottom: 1px solid #e6ece9; vertical-align: top; line-height: 1.5; }
   tbody tr:nth-child(even) { background: #f6f9f7; }
-  .callout { background: #eef7f0; border-left: 4px solid #2e8b57; border-radius: 0 8px 8px 0; padding: 13px 16px; margin: 14px 0 18px; font-size: 13px; line-height: 1.55; color: #24382d; }
-  .footer { margin: 0 40px; padding: 16px 0; color: #9aa8a1; font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5px; letter-spacing: 0.04em; border-top: 1px solid #ecefed; }
-  @page { margin: 13mm; }
+  tr { break-inside: avoid; }
+  .callout { background: #eef7f0; border-left: 4px solid #2e8b57; border-radius: 0 8px 8px 0; padding: 13px 16px; margin: 14px 0 18px; font-size: 13px; line-height: 1.55; color: #24382d; break-inside: avoid-page; }
+  a { color: #147a4d; text-decoration: underline; }
+  hr { margin: 24px 0; border: 0; border-top: 1px solid #dce8e1; }
+  .footer { margin: 0 40px; padding: 16px 0; color: #9aa8a1; font-size: 10.5px; letter-spacing: 0.04em; border-top: 1px solid #ecefed; }
+  @page { size: A4; margin: 15mm 14mm 18mm; }
   .banner, th, .callout, tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style></head><body>
   <div class="banner">
-    <p class="kicker">${SITE_CONFIG.name} · La meilleure réponse</p>
+    <p class="kicker">${SITE_CONFIG.name} · Synthèse confrontée</p>
     <h1>${escapeHtml(cleanTitle)}</h1>
+    <p class="date">${escapeHtml(generatedAt)}</p>
   </div>
-  <div class="content">${body}</div>
+  <div class="content">
+    <div class="question"><strong>Demande</strong><br>${escapeHtml(question)}</div>
+    ${body}
+  </div>
   <div class="footer">Document généré par ${SITE_CONFIG.name}</div>
 </body></html>`;
 }
@@ -433,7 +492,9 @@ function xmlEscape(value: string): string {
 
 function inlineMarkdown(value: string): string {
   return escapeHtml(value)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
@@ -547,8 +608,8 @@ function buildPdfHtml(title: string, question: string, answer: string): string {
       .footer{margin-top:34px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:12px;color:#64748b}
     </style>
     <h1>${inlineMarkdown(title || `Document ${SITE_CONFIG.name}`)}</h1>
-    <div class="meta">Question : ${inlineMarkdown(question || `Conversation ${SITE_CONFIG.name}`)}</div>
-    <div class="note">Document généré depuis la dernière réponse ${SITE_CONFIG.name}.</div>
+    <div class="meta">Demande : ${inlineMarkdown(question || `Conversation ${SITE_CONFIG.name}`)}</div>
+    <div class="note">Document généré depuis la dernière synthèse ${SITE_CONFIG.name}.</div>
     ${markdownToHtml(answer)}
     <div class="footer">${SITE_CONFIG.name} export</div>
   </div>`;
@@ -721,9 +782,9 @@ function createNativePdfBlob(title: string, question: string, answer: string): B
 
   fill(0.95, 0.97, 0.98, marginX, 736, contentWidth, 40);
   text(title || `Document ${SITE_CONFIG.name}`, marginX, 790, 22, true);
-  paragraph(`Question : ${question || `Conversation ${SITE_CONFIG.name}`}`, 10.5, false);
+  paragraph(`Demande : ${question || `Conversation ${SITE_CONFIG.name}`}`, 10.5, false);
   y -= 2;
-  paragraph(`Document généré depuis la dernière réponse ${SITE_CONFIG.name}.`, 10.5, true);
+  paragraph(`Document généré depuis la dernière synthèse ${SITE_CONFIG.name}.`, 10.5, true);
 
   const lines = answer.split("\n");
   for (let index = 0; index < lines.length; index += 1) {
@@ -1065,9 +1126,9 @@ function buildWorkbookSheets(result: FinalPayload, question: string) {
   const summaryRows = [
     ["Champ", "Valeur"],
     ["Titre", result.final.title],
-    ["Question", question],
+    ["Demande", question],
     ["Confiance", result.final.confidence],
-    ["Réponse", pdfText(answer)],
+    ["Synthèse", pdfText(answer)],
     ...result.final.keyPoints.map((point, index) => [
       `Point clé ${index + 1}`,
       pdfText(point),
@@ -1106,20 +1167,25 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function getExportIntent(prompt: string): "pdf" | "xlsx" | null {
+export function getExportIntent(prompt: string): "pdf" | "xlsx" | null {
   const text = prompt
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const asksForDocumentAction =
-    /(telecharg|download|dl|lien|export|genere|cree|fais|donne|renvoi|envoie|sort|refais|refaire|modifie|modifier|ameliore|ameliorer|mets|mettre|ajoute|ajouter|couleur|colore|forme|mise en forme|tableau|format)/.test(
-      text,
-    );
-  const wantsPdf = /\b(pdf|imprimer|document|page|brochure|presentation)\b/.test(text);
-  const wantsExcel = /\b(excel|xlsx|csv|tableur|feuille|classeur)\b/.test(text);
-  if (!asksForDocumentAction && !wantsPdf && !wantsExcel) return null;
-  if (wantsExcel) return "xlsx";
-  if (wantsPdf) return "pdf";
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+  // Une consigne d'export se trouve normalement à la fin d'une demande longue.
+  // Limiter l'analyse à cette zone évite qu'un wording, une FAQ ou un document
+  // cité contenant « Télécharger PDF » déclenche un faux export.
+  const instruction = text.slice(-400);
+  const pdfFormat = "(?:pdf|brochure|presentation au format pdf)";
+  const excelFormat = "(?:excel|xlsx|csv|tableur)";
+  const explicitlyRequests = (format: string) =>
+    new RegExp(
+      `(?:fais(?:-moi| moi)?|genere(?:-moi)?|cree(?:-moi)?|prepare(?:-moi)?|exporte(?:-moi)?|convertis|je (?:veux|voudrais|souhaite)|peux[- ]tu (?:faire|generer|creer|preparer|exporter)).{0,80}\\b${format}\\b`,
+    ).test(instruction);
+
+  if (explicitlyRequests(excelFormat)) return "xlsx";
+  if (explicitlyRequests(pdfFormat)) return "pdf";
   return null;
 }
 
@@ -1239,6 +1305,47 @@ export function SynthClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Empêche l'écran de s'éteindre pendant une génération lorsque le navigateur
+  // prend en charge Screen Wake Lock. La demande est renouvelée si l'onglet
+  // redevient visible, puis libérée dès que le traitement se termine.
+  useEffect(() => {
+    if (phase !== "loading" || !("wakeLock" in navigator)) return;
+
+    let active = true;
+    let sentinel: WakeLockSentinel | null = null;
+
+    const acquire = async () => {
+      if (!active || document.visibilityState !== "visible" || sentinel) return;
+      try {
+        sentinel = await navigator.wakeLock.request("screen");
+        sentinel.addEventListener(
+          "release",
+          () => {
+            sentinel = null;
+          },
+          { once: true },
+        );
+      } catch {
+        // Le système ou le navigateur peut refuser le verrou : la génération
+        // continue normalement, sans garantie contre la veille de la machine.
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+
+    void acquire();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void sentinel?.release();
+      sentinel = null;
+    };
+  }, [phase]);
+
   useEffect(() => {
     const currentPrompt = question.trim();
     if (
@@ -1301,7 +1408,7 @@ export function SynthClient({
         const data = await res.json().catch(() => null);
         setErrorMsg(
           data?.error ??
-            "Impossible de générer une réponse pour le moment. Réessayez dans quelques instants.",
+            "Impossible de générer une synthèse pour le moment. Réessayez dans quelques instants.",
         );
         setPhase("error");
         return;
@@ -1328,7 +1435,7 @@ export function SynthClient({
         return;
       }
       setErrorMsg(
-        "Impossible de générer une réponse pour le moment. Réessayez dans quelques instants.",
+        "Impossible de générer une synthèse pour le moment. Réessayez dans quelques instants.",
       );
       setPhase("error");
     } finally {
@@ -1400,7 +1507,7 @@ export function SynthClient({
         break;
       case "final":
         setJudging("ok");
-        setResult(ev as unknown as FinalPayload);
+        setResult(normalizeFinalPayload(ev as unknown as FinalPayload));
         setPhase("answer");
         setQuestion("");
         setAttachments([]);
@@ -1413,7 +1520,7 @@ export function SynthClient({
       case "error":
         setErrorMsg(
           (ev.error as string) ??
-            "Impossible de générer une réponse pour le moment.",
+            "Impossible de générer une synthèse pour le moment.",
         );
         setPhase("error");
         break;
@@ -1724,7 +1831,9 @@ export function SynthClient({
       setSteps(newSteps);
 
       setAskedQuestion(current.content);
-      setResult({ conversationId: id, final: current.final, providers });
+      setResult(
+        normalizeFinalPayload({ conversationId: id, final: current.final, providers }),
+      );
       setJudging("ok");
       setPhase("answer");
     } catch {
@@ -1889,9 +1998,9 @@ export function SynthClient({
 
   const headerNote =
     phase === "answer"
-      ? "Réponse prête"
+      ? "Synthèse prête"
       : phase === "loading"
-        ? "Réflexion en cours…"
+        ? "Analyses en cours…"
         : phase === "error"
           ? "Erreur"
           : "Prêt";
@@ -1961,7 +2070,7 @@ export function SynthClient({
             className="flex h-[44px] w-full items-center justify-center gap-1 rounded-xl bg-primary px-[14px] text-[14px] font-semibold tracking-[-0.01em] text-primary-fg shadow-[0_0_26px_-8px_rgba(43,245,168,.8)] transition hover:-translate-y-px hover:brightness-105"
           >
             <span className="text-[17px] font-normal leading-none">+</span>{" "}
-            Nouvelle question
+            Nouvelle demande
           </button>
           <button
             onClick={openProjectDialog}
@@ -2013,7 +2122,7 @@ export function SynthClient({
           {/* Récentes */}
           <Section title="RÉCENTES">
             {loose.length === 0 ? (
-              <p className="px-3 text-[13px] text-faint">Aucune question.</p>
+              <p className="px-3 text-[13px] text-faint">Aucune demande.</p>
             ) : (
               loose.map(renderConv)
             )}
@@ -2104,11 +2213,11 @@ export function SynthClient({
                 <ThemisMark size={30} glow />
               </div>
               <h1 className="m-0 mb-[9px] text-[26px] font-semibold tracking-[-0.02em]">
-                Que voulez-vous savoir ?
+                Que souhaitez-vous analyser ?
               </h1>
               <p className="m-0 max-w-[380px] text-[15.5px] leading-[1.5] text-muted-fg">
-                Posez une question. {SITE_CONFIG.name} confronte les pistes et vous rend la
-                meilleure réponse.
+                Envoyez une demande. Plusieurs modèles l&apos;analysent, puis {SITE_CONFIG.name}{" "}
+                confronte leurs conclusions et produit une synthèse unique.
               </p>
             </div>
           </div>
@@ -2123,7 +2232,7 @@ export function SynthClient({
                     <div key={ti} className="animate-synth-rise">
                       <div className="glass-soft mb-4 flex items-start gap-[11px] rounded-[13px] px-[17px] py-[13px]">
                         <span className="pt-[2px] font-mono text-[12px] text-faint">
-                          Q
+                          D
                         </span>
                         <span className="text-[15px] leading-[1.5] text-[#C6D2CB]">
                           {turn.question}
@@ -2143,9 +2252,7 @@ export function SynthClient({
                           {turn.final.title}
                         </h3>
                       )}
-                      <div className="whitespace-pre-wrap text-[15px] leading-[1.6] text-[#B8C5BD]">
-                        {turn.final.finalAnswer}
-                      </div>
+                      <FormattedAnswer content={turn.final.finalAnswer} compact />
                     </div>
                   ))}
                 </div>
@@ -2163,7 +2270,11 @@ export function SynthClient({
                     ))}
                   </div>
                   <p className="m-0 mb-5 text-[17px] font-medium text-foreground">
-                    {SITE_CONFIG.name} confronte les pistes…
+                    {SITE_CONFIG.name} confronte les analyses…
+                  </p>
+                  <p className="m-0 mb-5 max-w-[430px] text-[13px] leading-[1.5] text-faint">
+                    Plusieurs modèles analysent votre demande avant la synthèse finale.
+                    Vous suivez chaque étape en direct.
                   </p>
                   <div className="relative mb-6 h-[3px] w-[260px] overflow-hidden rounded-full bg-[linear-gradient(90deg,transparent,rgba(43,245,168,.1)_16%,rgba(43,245,168,.18)_50%,rgba(43,245,168,.1)_84%,transparent)]">
                     <span className="animate-synth-bar absolute left-0 top-0 h-full w-[46%] rounded-full bg-[linear-gradient(90deg,transparent_0%,rgba(43,245,168,.35)_18%,#2bf5a8_50%,rgba(43,245,168,.35)_82%,transparent_100%)] shadow-[0_0_12px_rgba(43,245,168,.95),0_0_28px_rgba(43,245,168,.45)]" />
@@ -2203,7 +2314,7 @@ export function SynthClient({
                 <div className="animate-synth-rise">
                   <div className="glass-soft mb-[22px] flex items-start gap-[11px] rounded-[13px] px-[17px] py-[15px]">
                     <span className="pt-[2px] font-mono text-[12px] text-faint">
-                      Q
+                      D
                     </span>
                     <span className="text-[15.5px] leading-[1.5] text-[#C6D2CB]">
                       {askedQuestion}
@@ -2219,7 +2330,7 @@ export function SynthClient({
                       ● {CONFIDENCE[result.final.confidence].label}
                     </span>
                     <span className="font-mono text-[11px] text-faint">
-                      Réponse synthétisée
+                      Synthèse consolidée
                     </span>
                   </div>
 
@@ -2228,7 +2339,7 @@ export function SynthClient({
                       <p className="m-0 text-[14px] leading-[1.5] text-[#C8F7E4]">
                         Cette conversation commence à être longue. {SITE_CONFIG.name} garde
                         le contexte utile, mais un nouveau fil donnera de
-                        meilleures réponses pour un autre sujet.
+                        meilleures synthèses pour un autre sujet.
                       </p>
                       <button
                         onClick={() => newQuestion(true)}
@@ -2243,10 +2354,8 @@ export function SynthClient({
                     {result.final.title}
                   </h1>
 
-                  <div className="text-[16px] leading-[1.65] text-[#B8C5BD]">
-                    <p className="m-0 mb-4 whitespace-pre-wrap">
-                      {result.final.finalAnswer}
-                    </p>
+                  <div>
+                    <FormattedAnswer content={result.final.finalAnswer} />
 
                     {result.final.keyPoints.length > 0 && (
                       <>
@@ -2316,13 +2425,13 @@ export function SynthClient({
                       onClick={printStyledPdf}
                       className="h-[42px] rounded-md border border-border bg-white/[.04] px-[16px] text-[14px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
                     >
-                      Télécharger PDF
+                      Exporter en PDF
                     </button>
                     <button
                       onClick={exportExcel}
                       className="h-[42px] rounded-md border border-border bg-white/[.04] px-[16px] text-[14px] font-medium text-muted-fg transition hover:border-accent/30 hover:bg-accent/[.08] hover:text-foreground"
                     >
-                      Télécharger Excel
+                      Exporter vers Excel
                     </button>
                     {exportFile ? (
                       <a
@@ -2337,7 +2446,7 @@ export function SynthClient({
                       onClick={copyAnswer}
                       className="h-[42px] rounded-md px-[18px] text-[14px] font-medium text-muted-fg transition hover:text-foreground"
                     >
-                      {toast ? "Réponse copiée." : "Copier la réponse"}
+                      {toast ? "Synthèse copiée." : "Copier la synthèse"}
                     </button>
                   </div>
                   {exportFile ? (
@@ -2397,7 +2506,7 @@ export function SynthClient({
                           PRÉCISIONS UTILES
                         </p>
                         <p className="m-0 text-[14px] leading-[1.4] text-[#C8F7E4]">
-                          {SITE_CONFIG.name} peut affiner le programme avec ces réponses.
+                          {SITE_CONFIG.name} peut affiner le programme avec ces précisions.
                         </p>
                       </div>
                       <button
@@ -2618,7 +2727,7 @@ export function SynthClient({
                       submit();
                     }
                   }}
-                  placeholder="Posez votre question…"
+                  placeholder="Décrivez votre demande…"
                   rows={2}
                   disabled={false}
                   className="w-full resize-none bg-transparent px-3 pb-1 pt-[10px] text-[16px] leading-[1.5] text-foreground outline-none placeholder:text-faint disabled:opacity-50"
@@ -2860,6 +2969,9 @@ export function SynthClient({
               <p className="mb-0 mt-2 text-[12.5px] leading-[1.45] text-muted-fg">
                 Une synthèse standard utilise environ 20 crédits. Le coût exact
                 dépend du mode choisi et de la taille du contexte.
+              </p>
+              <p className="mb-0 mt-1 text-[12.5px] leading-[1.45] text-faint">
+                Votre solde et votre consommation restent visibles à tout moment.
               </p>
             </div>
 
@@ -3269,9 +3381,9 @@ function DeliberationPanel({
   );
   const convergence = result
     ? result.final.confidence === "high"
-      ? "Convergence forte"
+      ? "Conclusions proches"
       : result.final.confidence === "medium"
-        ? "Convergence partielle"
+        ? "Conclusions partiellement proches"
         : "À vérifier"
     : judging === "running"
       ? "Synthèse en cours"
@@ -3295,9 +3407,9 @@ function DeliberationPanel({
 
         <div className="rounded-xl border border-white/[.1] bg-black/10 px-3 py-3">
           <div className="flex items-start gap-2.5">
-            <span className="mt-[1px] font-mono text-[12px] text-accent">Q</span>
+            <span className="mt-[1px] font-mono text-[12px] text-accent">D</span>
             <p className="m-0 line-clamp-3 text-[12.5px] leading-[1.45] text-foreground">
-              {question || "Préparation de la question…"}
+              {question || "Préparation de la demande…"}
             </p>
           </div>
         </div>
@@ -3317,8 +3429,8 @@ function DeliberationPanel({
                 ? `${raw.slice(0, 145)}…`
                 : raw
               : step.status === "running"
-                ? "Analyse de la question en cours…"
-                : step.error || "Ce modèle n’a pas pu répondre.";
+                ? "Analyse de la demande en cours…"
+                : step.error || "Ce modèle n’a pas pu terminer son analyse.";
             return (
               <div
                 key={modelId}
@@ -3331,7 +3443,7 @@ function DeliberationPanel({
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="m-0 font-mono text-[11px] tracking-[0.13em] text-accent">
-                      MODÈLE {String.fromCharCode(65 + index)}
+                      ANALYSE {index + 1}
                     </p>
                     <p className="m-0 mt-0.5 truncate text-[10.5px] text-faint">
                       {step.model ?? model.shortLabel}
@@ -3344,7 +3456,7 @@ function DeliberationPanel({
                         ? "animate-synth-pulse bg-accent/[.08] text-accent"
                         : "bg-white/[.06] text-faint"
                   }`}>
-                    {step.status === "ok" ? "RÉPONDU" : step.status === "running" ? "ANALYSE" : "ÉCHEC"}
+                    {step.status === "ok" ? "TERMINÉE" : step.status === "running" ? "EN COURS" : "ÉCHEC"}
                   </span>
                 </div>
                 <p className="m-0 text-[12px] leading-[1.55] text-muted-fg">{preview}</p>
@@ -3382,6 +3494,12 @@ function DeliberationPanel({
               {disagreement}
             </p>
           </div>
+        ) : null}
+        {result ? (
+          <p className="m-0 mt-4 text-[10.5px] leading-[1.45] text-faint">
+            Le niveau d&apos;accord décrit la proximité des conclusions. Il ne garantit pas
+            que la synthèse est vraie.
+          </p>
         ) : null}
       </div>
     </aside>

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+import { extractJsonStringField } from "./judge-output";
 import { JUDGE_SYSTEM_PROMPT, buildJudgeUserPrompt } from "./prompts";
 import type {
   ConfidenceLevel,
@@ -9,6 +10,10 @@ import type {
 
 const JUDGE_MODEL =
   process.env.JUDGE_MODEL ?? process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
+const JUDGE_MAX_TOKENS = Math.min(
+  32_768,
+  Math.max(4_096, Number(process.env.JUDGE_MAX_TOKENS) || 16_384),
+);
 
 // Confiance par défaut selon le nombre de réponses disponibles, utilisée comme
 // repli si le Juge ne fournit pas de valeur exploitable.
@@ -46,7 +51,7 @@ export async function judge(
 
   const message = await client.messages.create({
     model: JUDGE_MODEL,
-    max_tokens: 4096,
+    max_tokens: JUDGE_MAX_TOKENS,
     system: JUDGE_SYSTEM_PROMPT,
     messages: [
       { role: "user", content: buildJudgeUserPrompt(originalPrompt, results) },
@@ -98,10 +103,17 @@ export async function judge(
       usedProviders,
     };
   } catch {
-    const finalAnswer =
-      raw || "Aucune réponse exploitable n'a pu être produite.";
+    const recoveredAnswer = extractJsonStringField(raw, "finalAnswer");
+    const finalAnswer = recoveredAnswer
+      ? `${recoveredAnswer}${
+          message.stop_reason === "max_tokens"
+            ? "\n\n_La réponse a été interrompue avant sa conclusion._"
+            : ""
+        }`
+      : "La réponse structurée n'a pas pu être finalisée. Vous pouvez relancer la demande.";
+    const recoveredTitle = extractJsonStringField(raw, "title");
     return {
-      title: fallbackTitle(finalAnswer),
+      title: recoveredTitle ?? fallbackTitle(finalAnswer),
       finalAnswer,
       keyPoints: [],
       confidence: defaultConfidence,

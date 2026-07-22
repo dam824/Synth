@@ -17,9 +17,9 @@ export default function LoginPage() {
             Bon retour
           </h1>
           <p className="m-0 text-[15px] leading-[1.5] text-muted-fg">
-            Une question. La meilleure réponse.
+            Une demande. Plusieurs analyses.
             <br />
-            Connectez-vous pour continuer.
+            Une synthèse plus solide.
           </p>
         </div>
 

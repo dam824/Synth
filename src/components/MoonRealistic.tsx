@@ -48,9 +48,9 @@ const CONFIG = {
   arcTopFraction: 0.58,   // sommet de l'arc à 58% de la hauteur (0=haut, 1=bas)
   // Éclairage — lune de NUIT : sphère quasi noire, relief juste devinable,
   // aucune zone claire hormis le liseré du limbe.
-  directionalIntensity: 0.35, // sculpte les cratères, n'éclaire pas la face
+  directionalIntensity: 0.42, // sculpte les cratères, n'éclaire pas la face
   ambientIntensity: 0.01,     // quasi nul : les faces non éclairées tombent au noir
-  albedoScalar: 0.05,         // écrase la map couleur (0.03 noir ↔ 0.14 plus clair)
+  albedoScalar: 0.07,         // texture perceptible sans transformer la nuit en face éclairée
   toneMappingExposure: 0.6,   // enfonce les noirs (n'affecte pas le rim, ajouté après)
   // Suivi souris : la lune s'incline vers le pointeur (offset d'orientation
   // amorti, en radians), pendant que le spin X continue. Le liseré (espace

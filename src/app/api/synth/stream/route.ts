@@ -29,7 +29,7 @@ import type {
 
 // Pipeline IA en streaming : émet chaque étape (NDJSON) au fil de l'eau pour
 // alimenter la timeline « coulisses » côté client.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PROVIDERS: {
   name: ProviderName;
@@ -270,8 +270,19 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (obj: unknown) =>
-        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      let closed = false;
+      const send = (obj: unknown) => {
+        if (!closed) {
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+        }
+      };
+      const heartbeat = setInterval(() => send({ type: "heartbeat" }), 15_000);
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(heartbeat);
+        controller.close();
+      };
 
       try {
         send({
@@ -456,7 +467,7 @@ export async function POST(request: Request) {
             error:
               "Aucun fournisseur n'a pu répondre. Réessayez dans un instant.",
           });
-          controller.close();
+          close();
           return;
         }
 
@@ -517,7 +528,7 @@ export async function POST(request: Request) {
             latencyMs: r.latencyMs,
           })),
         });
-        controller.close();
+        close();
       } catch (err) {
         try {
           send({
@@ -527,7 +538,7 @@ export async function POST(request: Request) {
         } catch {
           /* contrôleur déjà fermé */
         }
-        controller.close();
+        close();
       }
     },
   });

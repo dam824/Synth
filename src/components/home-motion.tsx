@@ -46,7 +46,12 @@ export function HomeMotion() {
         gsap.set("#hero-answer", { y: 14 });
         gsap.set("#hero-badge", { scale: 0.9, transformOrigin: "50% 50%" });
 
-        const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        // Effet S1 : la séquence ne se joue plus au chargement (la section est
+        // cachée sous la lune) mais quand elle entre à l'écran, en fade-in-up.
+        const tl = gsap.timeline({
+          defaults: { ease: "power3.out" },
+          scrollTrigger: { trigger: "#top", start: "top 72%" },
+        });
         tl.to("[data-hero-copy] > *", { opacity: 1, y: 0, stagger: 0.09, duration: 0.7 })
           .to("[data-hero-panel]", { opacity: 1, y: 0, duration: 0.8 }, "-=0.55")
           .to("#hero-q", { opacity: 1, y: 0, duration: 0.4 }, "-=0.35")
@@ -58,24 +63,38 @@ export function HomeMotion() {
           .to("#hero-answer", { opacity: 1, y: 0, duration: 0.5 })
           .to("#hero-badge", { opacity: 1, scale: 1, duration: 0.35 });
 
-        // Losange vivant (respiration discrète)
-        gsap.to("#hero-diamond", {
-          scale: 1.1,
-          transformOrigin: "50% 50%",
-          duration: 1.8,
-          repeat: -1,
-          yoyo: true,
-          ease: "sine.inOut",
-          delay: 5,
+        // Losange vivant (respiration discrète) — démarre après la séquence,
+        // sinon il pulserait depuis scale 0 tant qu'elle n'a pas joué.
+        tl.eventCallback("onComplete", () => {
+          gsap.to("#hero-diamond", {
+            scale: 1.1,
+            transformOrigin: "50% 50%",
+            duration: 1.8,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut",
+            delay: 1.5,
+          });
         });
 
         // ---------- Révélations au scroll ----------
-        gsap.utils.toArray<HTMLElement>("[data-reveal]").forEach((el) => {
+        // Chaque élément garde son propre trigger (fiable), mais les cartes
+        // d'une même grille reçoivent un délai croissant selon leur position
+        // → elles apparaissent en fade-in-up LES UNES APRÈS LES AUTRES.
+        const reveals = gsap.utils.toArray<HTMLElement>("[data-reveal]");
+        const siblingIndex = new Map<HTMLElement, number>();
+        reveals.forEach((el) => {
+          const parent = el.parentElement;
+          if (!parent) return;
+          const count = siblingIndex.get(parent) ?? 0;
+          siblingIndex.set(parent, count + 1);
+          const isCard = reveals.some((other) => other !== el && other.parentElement === parent);
           gsap.from(el, {
             opacity: 0,
-            y: 34,
-            duration: 0.8,
-            ease: "power3.out",
+            y: 44,
+            duration: 1.4,
+            ease: "power2.out",
+            delay: isCard ? count * 0.22 : 0,
             scrollTrigger: { trigger: el, start: "top 88%" },
           });
         });

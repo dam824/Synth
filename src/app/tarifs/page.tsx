@@ -12,11 +12,11 @@ const PLANS = [
     name: "Découverte",
     price: "0 €",
     cadence: "pour commencer",
-    description: "Découvrez ce que plusieurs modèles apportent à une même question.",
+    description: "Testez l’analyse croisée sur vos vraies demandes.",
     credits: "100 crédits offerts",
-    equivalent: "Environ 5 synthèses standard",
+    equivalent: "Jusqu’à 5 synthèses standard",
     features: [
-      "Réponse consolidée",
+      "Synthèse consolidée",
       "Désaccords importants visibles",
       "1 projet",
       "Historique pendant 30 jours",
@@ -30,14 +30,14 @@ const PLANS = [
     name: "Essentiel",
     price: "14,90 €",
     cadence: "TTC / mois",
-    description: "Pour vos recherches, analyses et travaux réguliers.",
+    description: "Pour vos recherches et analyses régulières.",
     credits: "1 200 crédits / mois",
-    equivalent: "Environ 60 synthèses standard",
+    equivalent: "Jusqu’à 60 synthèses standard",
     features: [
-      "Analyses rapides, standard et approfondies",
+      "Synthèses standard et approfondies",
       "Jusqu’à 10 projets",
       "Historique complet",
-      "Export des réponses",
+      "Export des synthèses",
       "Report plafonné à une mensualité",
     ],
     cta: "Choisir Essentiel",
@@ -48,12 +48,12 @@ const PLANS = [
     name: "Pro",
     price: "29,90 €",
     cadence: "TTC / mois",
-    description: "Pour les réponses qui engagent votre travail.",
+    description: "Pour les décisions qui engagent votre travail.",
     credits: "3 000 crédits / mois",
-    equivalent: "Environ 150 synthèses standard",
+    equivalent: "Jusqu’à 150 synthèses standard",
     features: [
       "Tout ce qui est inclus dans Essentiel",
-      "Analyses approfondies",
+      "Analyse de documents",
       "Projets illimités",
       "Exports avancés",
       "Tâches longues estimées avant exécution",
@@ -64,10 +64,41 @@ const PLANS = [
 ];
 
 const FEATURES = [
-  ["Question rapide", "5 à 10 crédits", "Vérification légère"],
-  [`Synthèse standard ${SITE_CONFIG.name}`, "20 crédits", "Comparaison multi-modèles"],
-  ["Analyse approfondie", "À partir de 60 crédits", "Selon la complexité"],
-  ["Analyse de document", "Estimation préalable", "Selon la longueur du contexte"],
+  ["Demande rapide", "5 à 10 crédits", "Vérification légère"],
+  [`Synthèse standard ${SITE_CONFIG.name}`, "20 crédits", "Confrontation multi-modèles"],
+  ["Analyse approfondie", "60 à environ 200 crédits", "Selon la complexité et la longueur"],
+  ["Analyse de document", "Estimation préalable", "Selon le contexte transmis"],
+];
+
+const FAQ = [
+  {
+    question: `Quelle différence avec un chatbot classique ?`,
+    answer: `${SITE_CONFIG.name} lance plusieurs analyses à partir d’une seule demande, confronte leurs conclusions et vous remet une synthèse unique. Un chatbot mono-modèle produit directement sa propre réponse.`,
+  },
+  {
+    question: "Pourquoi la synthèse n’est-elle pas instantanée ?",
+    answer: `Plusieurs modèles analysent votre demande avant que leurs conclusions soient confrontées et synthétisées. Vous suivez chaque étape en direct.`,
+  },
+  {
+    question: "Comment fonctionnent les crédits ?",
+    answer: "Chaque opération utilise un nombre de crédits adapté au mode, à la complexité et au contexte. Le coût maximal est affiché avant validation, sans débit supplémentaire sans votre confirmation.",
+  },
+  {
+    question: "Que signifie le niveau de convergence ?",
+    answer: "Il mesure le niveau d’accord entre les analyses. Des conclusions proches renforcent la cohérence du résultat, mais ne garantissent pas qu’il est vrai.",
+  },
+  {
+    question: "Que se passe-t-il si un modèle échoue ?",
+    answer: `${SITE_CONFIG.name} rend l’échec visible et consolide les analyses effectivement disponibles, sans présenter une analyse manquante comme obtenue.`,
+  },
+  {
+    question: "Puis-je récupérer ou supprimer mes données ?",
+    answer: "Vous pouvez exporter vos synthèses et supprimer votre historique depuis votre espace. Les limites de conservation applicables sont indiquées dans votre formule.",
+  },
+  {
+    question: "Puis-je résilier mon abonnement ?",
+    answer: "Oui. Les offres mensuelles sont sans engagement et résiliables à tout moment.",
+  },
 ];
 
 type TarifsPageProps = {
@@ -119,20 +150,20 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
           <div className="glass-accent mb-[24px] inline-flex items-center gap-2 rounded-full px-[13px] py-[6px]">
             <span className="h-[6px] w-[6px] rounded-full bg-accent shadow-glow" />
             <span className="text-[12.5px] font-medium text-[#6FE9B7]">
-              Des règles claires, sans quota caché
+              Votre solde et votre consommation restent visibles
             </span>
           </div>
           <h1 className="m-0 max-w-[760px] text-[42px] font-bold leading-[1.02] tracking-[-0.04em] sm:text-[64px]">
-            Choisissez votre rythme.
+            Une demande. Plusieurs analyses.
             <br />
             <span className="bg-gradient-to-r from-accent via-[#7FF0C2] to-accent bg-clip-text text-transparent drop-shadow-[0_0_38px_rgba(43,245,168,.35)]">
-              Gardez le contrôle de chaque analyse.
+              Une synthèse plus solide.
             </span>
           </h1>
           <p className="m-0 mt-[24px] max-w-[620px] text-[18px] leading-[1.55] text-muted-fg">
-            Chaque formule inclut un budget mensuel de crédits. Avant chaque
-            tâche, vous connaissez son coût maximal. Aucun dépassement sans
-            votre confirmation.
+            Plusieurs modèles analysent votre demande. {SITE_CONFIG.name}
+            confronte leurs conclusions, fait ressortir les désaccords et
+            produit une synthèse unique.
           </p>
           {params?.checkout === "success" ? (
             <div className="glass-accent mt-7 max-w-[620px] rounded-2xl px-5 py-4 text-[14.5px] leading-[1.5] text-[#B9F8DA]">
@@ -153,6 +184,61 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
             </div>
           ) : null}
         </header>
+
+        <section className="grid gap-5 pb-[54px] md:grid-cols-2">
+          <div className="glass rounded-2xl p-7">
+            <p className="m-0 mb-3 font-mono text-[12px] tracking-[0.08em] text-faint">
+              SANS {SITE_CONFIG.name.toUpperCase()}
+            </p>
+            <h2 className="m-0 text-[24px] font-bold tracking-[-0.025em]">
+              Comparer plusieurs outils à la main
+            </h2>
+            <p className="mb-0 mt-3 text-[14.5px] leading-[1.65] text-muted-fg">
+              Répéter votre demande, rassembler les résultats, repérer les
+              contradictions puis construire vous-même une conclusion.
+            </p>
+          </div>
+          <div className="glass-accent rounded-2xl p-7">
+            <p className="m-0 mb-3 font-mono text-[12px] tracking-[0.08em] text-[#6FE9B7]">
+              AVEC {SITE_CONFIG.name.toUpperCase()}
+            </p>
+            <h2 className="m-0 text-[24px] font-bold tracking-[-0.025em]">
+              Une seule demande, une synthèse exploitable
+            </h2>
+            <p className="mb-0 mt-3 text-[14.5px] leading-[1.65] text-muted-fg">
+              Les analyses sont lancées ensemble, leurs désaccords sont rendus
+              visibles et leurs conclusions sont consolidées en un seul résultat.
+            </p>
+          </div>
+        </section>
+
+        <section className="pb-[56px]">
+          <div className="glass rounded-2xl p-7 sm:p-9">
+            <p className="m-0 mb-3 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
+              LA VALEUR D’UNE SYNTHÈSE
+            </p>
+            <h2 className="m-0 max-w-[760px] text-[30px] font-bold tracking-[-0.03em]">
+              La confrontation est faite pour vous, sans multiplier les onglets.
+            </h2>
+            <p className="mb-0 mt-4 max-w-[760px] text-[15px] leading-[1.65] text-muted-fg">
+              Une synthèse {SITE_CONFIG.name} vous évite d’interroger plusieurs
+              outils, de copier leurs réponses et de comparer leurs contradictions
+              à la main.
+            </p>
+            <div className="mt-7 grid gap-4 md:grid-cols-3">
+              {[
+                "Plusieurs analyses lancées depuis une seule demande",
+                "Désaccords et incertitudes rendus visibles",
+                "Une synthèse unique, prête à être exploitée",
+              ].map((benefit) => (
+                <div key={benefit} className="flex gap-3 rounded-xl border border-white/[.06] bg-black/10 p-4 text-[14px] leading-[1.55] text-muted-fg">
+                  <Diamond size={9} />
+                  <span>{benefit}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <section className="relative pb-[64px] pt-4">
           <div
@@ -240,9 +326,9 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
 
           <div className="glass overflow-hidden rounded-2xl">
             <div className="grid grid-cols-[1.3fr_.7fr_1fr] border-b border-white/[.06] px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-faint">
-              <span>Action</span>
-              <span>Prix</span>
-              <span>Note</span>
+              <span>Opération</span>
+              <span>Coût indicatif</span>
+              <span>Explication</span>
             </div>
             {FEATURES.map(([name, price, note]) => (
               <div
@@ -256,24 +342,63 @@ export default async function TarifsPage({ searchParams }: TarifsPageProps) {
             ))}
           </div>
           <p className="mt-4 text-[12.5px] leading-[1.5] text-faint">
-            Estimations fondées sur une synthèse standard à 20 crédits. La
-            consommation varie selon le mode, les modèles mobilisés et la taille
-            du contexte.
+            Le coût maximal est affiché avant validation. Aucun débit
+            supplémentaire sans votre confirmation.
           </p>
         </section>
 
-        <section className="pb-[70px]">
-          <div className="glass rounded-2xl p-7 text-center">
-            <p className="m-0 mb-2 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
-              POUR LES ÉQUIPES
+        <section className="pb-[60px]">
+          <div className="glass rounded-2xl p-7 sm:p-9">
+            <p className="m-0 mb-3 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">
+              CONFIANCE ET CONTRÔLE
             </p>
-            <h2 className="m-0 text-[25px] font-bold tracking-[-0.02em]">
-              Vous équipez une agence ou un cabinet ?
+            <h2 className="m-0 text-[28px] font-bold tracking-[-0.03em]">
+              Vous gardez la main à chaque étape.
             </h2>
-            <p className="mx-auto mb-0 mt-3 max-w-[560px] text-[14.5px] text-muted-fg">
-              L&apos;offre Équipe arrive prochainement. Contactez-nous pour nous
-              parler de vos besoins de collaboration et de facturation.
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {[
+                "Coût maximal annoncé avant validation",
+                "Solde et consommation visibles à tout moment",
+                "Désaccords et échecs de modèles signalés",
+                "Historique exportable et supprimable depuis votre espace",
+              ].map((item) => (
+                <div key={item} className="flex gap-3 text-[14.5px] leading-[1.55] text-muted-fg">
+                  <span className="text-accent">✓</span>
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="pb-[64px]">
+          <p className="m-0 mb-2 font-mono text-[12px] tracking-[0.08em] text-[#4FE3A8]">FAQ</p>
+          <h2 className="m-0 mb-6 text-[30px] font-bold tracking-[-0.03em]">Avant de vous lancer</h2>
+          <div className="grid gap-3">
+            {FAQ.map((item) => (
+              <details key={item.question} className="glass group rounded-2xl px-5 py-4 open:pb-5">
+                <summary className="cursor-pointer list-none pr-8 text-[15px] font-semibold marker:content-none">
+                  {item.question}
+                  <span className="float-right text-accent transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mb-0 mt-3 max-w-[820px] text-[14px] leading-[1.65] text-muted-fg">{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="pb-[80px]">
+          <div className="glass-accent rounded-2xl px-7 py-10 text-center sm:px-10">
+            <h2 className="m-0 text-[30px] font-bold tracking-[-0.03em]">
+              Confrontez votre première demande.
+            </h2>
+            <p className="mx-auto mb-0 mt-3 max-w-[600px] text-[14.5px] leading-[1.6] text-muted-fg">
+              Commencez avec 100 crédits offerts, sans carte bancaire, et voyez
+              ce que plusieurs analyses apportent à votre décision.
             </p>
+            <Link href={appHref} className="mt-7 inline-flex h-[46px] items-center justify-center rounded-[12px] bg-primary px-6 text-[14px] font-semibold text-primary-fg shadow-glow transition hover:brightness-110">
+              Essayer gratuitement
+            </Link>
           </div>
         </section>
       </div>

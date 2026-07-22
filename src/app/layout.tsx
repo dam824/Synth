@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 
 export const metadata: Metadata = {
   title: `${SITE_CONFIG.name} — ${SITE_CONFIG.tagline}`,
-  description: `Une question. La meilleure réponse. ${SITE_CONFIG.name} confronte, affine et synthétise pour vous.`,
+  description: `Une demande. Plusieurs analyses. Une synthèse plus solide. ${SITE_CONFIG.name} confronte et synthétise pour vous.`,
   icons: {
     icon: "/brand/themis-logo.svg",
     shortcut: "/brand/themis-logo.svg",
